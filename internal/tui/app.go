@@ -68,6 +68,7 @@ type App struct {
 	width      int
 	height     int
 	boardReady bool
+	detail     DetailModel
 
 	// Command palette
 	commandPalette list.Model
@@ -93,6 +94,7 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		status:         "Loading board...",
 		loading:        true,
 		commandPalette: palette,
+		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme)),
 	}
 }
 
@@ -156,15 +158,51 @@ func (a App) reorderCardCmd(cardID string, pos float64) tea.Cmd {
 	}
 }
 
+func (a *App) updateDetailLayout() {
+	boardWidth := a.width * 60 / 100
+	panelWidth := a.width - boardWidth
+	a.board.width = boardWidth
+	a.board.height = a.height - 4
+	a.board.ResizeColumns()
+	a.detail.SetSize(panelWidth, a.height-2)
+}
+
+func (a App) fetchDetailData() tea.Cmd {
+	cardID := a.detail.cardID
+	switch a.detail.tab {
+	case tabComments:
+		return func() tea.Msg {
+			comments, err := a.client.FetchCardComments(cardID)
+			if err != nil {
+				return CardCommentsFetchErrMsg{CardID: cardID, Err: err}
+			}
+			return CardCommentsMsg{CardID: cardID, Comments: comments}
+		}
+	case tabChecklists:
+		return func() tea.Msg {
+			checklists, err := a.client.FetchCardChecklists(cardID)
+			if err != nil {
+				return CardChecklistsFetchErrMsg{CardID: cardID, Err: err}
+			}
+			return CardChecklistsMsg{CardID: cardID, Checklists: checklists}
+		}
+	}
+	return nil
+}
+
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
 		if a.boardReady {
-			a.board.width = msg.Width
-			a.board.height = msg.Height - 4
-			a.board.ResizeColumns()
+			if a.detail.open {
+				a.updateDetailLayout()
+			} else {
+				a.board.width = msg.Width
+				a.board.height = msg.Height - 4
+				a.board.ResizeColumns()
+			}
 		}
 		return a, nil
 
@@ -173,6 +211,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.boardReady = true
 		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height-4)
 		a.status = fmt.Sprintf("%s — %s", msg.Board.Name, a.board.PositionIndicator())
+		a.detail.open = false
+		a.detail.cardID = ""
 		return a, nil
 
 	case BoardFetchErrMsg:
@@ -205,6 +245,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			a.board.InsertCard(msg.FromCol, msg.Card, msg.FromIdx)
 		}
+		return a, nil
+
+	case CardCommentsMsg:
+		a.detail.HandleCommentsMsg(msg)
+		return a, nil
+
+	case CardCommentsFetchErrMsg:
+		a.detail.HandleCommentsFetchErr(msg)
+		return a, nil
+
+	case CardChecklistsMsg:
+		a.detail.HandleChecklistsMsg(msg)
+		return a, nil
+
+	case CardChecklistsFetchErrMsg:
+		a.detail.HandleChecklistsFetchErr(msg)
 		return a, nil
 
 	case tea.KeyPressMsg:
@@ -334,12 +390,73 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.MoveCardDown):
 			return a.handleMoveCardDown()
+
+		case matchKey(msg, a.keyMap.DetailToggle):
+			if a.boardReady {
+				a.detail.Toggle()
+				if a.detail.open {
+					if card, _, ok := a.board.SelectedCard(); ok {
+						a.detail.SetCard(card)
+						a.updateDetailLayout()
+						if a.detail.NeedsFetch() {
+							return a, a.fetchDetailData()
+						}
+						return a, nil
+					}
+					a.updateDetailLayout()
+				} else {
+					a.board.width = a.width
+					a.board.height = a.height - 4
+					a.board.ResizeColumns()
+				}
+				return a, nil
+			}
+
+		case matchKey(msg, a.keyMap.DetailTabNext):
+			if a.boardReady && a.detail.open {
+				a.detail.NextTab()
+				if a.detail.NeedsFetch() {
+					return a, a.fetchDetailData()
+				}
+				return a, nil
+			}
+
+		case matchKey(msg, a.keyMap.DetailTabPrev):
+			if a.boardReady && a.detail.open {
+				a.detail.PrevTab()
+				if a.detail.NeedsFetch() {
+					return a, a.fetchDetailData()
+				}
+				return a, nil
+			}
+
+		case matchKey(msg, a.keyMap.DetailScrollDown):
+			if a.boardReady && a.detail.open {
+				d, cmd := a.detail.Update(tea.KeyPressMsg{Code: 'j'})
+				a.detail = d
+				return a, cmd
+			}
+
+		case matchKey(msg, a.keyMap.DetailScrollUp):
+			if a.boardReady && a.detail.open {
+				d, cmd := a.detail.Update(tea.KeyPressMsg{Code: 'k'})
+				a.detail = d
+				return a, cmd
+			}
 		}
 
 		// Pass to board for card navigation (up/down via bubbles/list)
 		if a.boardReady {
 			var cmd tea.Cmd
 			a.board, cmd = a.board.Update(msg)
+			if a.detail.open {
+				if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
+					a.detail.SetCard(card)
+					if a.detail.NeedsFetch() {
+						return a, tea.Batch(cmd, a.fetchDetailData())
+					}
+				}
+			}
 			return a, cmd
 		}
 	}
@@ -587,7 +704,11 @@ func (a App) View() tea.View {
 	} else if a.loading {
 		content = "\n  Loading board...\n"
 	} else if a.boardReady {
-		content = a.board.View()
+		if a.detail.open {
+			content = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), a.detail.View())
+		} else {
+			content = a.board.View()
+		}
 	} else {
 		content = "\n  " + a.status + "\n"
 	}
@@ -620,6 +741,10 @@ func (a App) renderHelp() string {
 		{a.keyMap.MoveCardUp.Keys()[0], "Move card up"},
 		{a.keyMap.MoveCardDown.Keys()[0], "Move card down"},
 		{a.keyMap.CustomCommand.Keys()[0], "Command palette"},
+		{a.keyMap.DetailToggle.Keys()[0], "Toggle detail panel"},
+		{a.keyMap.DetailTabPrev.Keys()[0] + "/" + a.keyMap.DetailTabNext.Keys()[0], "Switch detail tab"},
+		{a.keyMap.DetailScrollDown.Keys()[0], "Scroll detail down"},
+		{a.keyMap.DetailScrollUp.Keys()[0], "Scroll detail up"},
 	}
 
 	lines := title + "\n\n"

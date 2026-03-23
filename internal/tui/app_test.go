@@ -119,3 +119,47 @@ func TestAppMoveCardUpTwice(t *testing.T) {
 		t.Fatalf("expected c2 still selected after second move, got %s", card.ID)
 	}
 }
+
+func TestDetailToggleKey(t *testing.T) {
+	cfg := config.DefaultConfig()
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+
+	board := makeTestBoard(3)
+	app.boardReady = true
+	app.board = NewBoardModel(board, cfg, 80, 24)
+
+	msg := tea.KeyPressMsg{Code: -1, Text: "d"}
+	result, _ := app.Update(msg)
+	a := result.(App)
+	if !a.detail.open {
+		t.Error("expected detail panel to be open after pressing 'd'")
+	}
+
+	result, _ = a.Update(msg)
+	a = result.(App)
+	if a.detail.open {
+		t.Error("expected detail panel to be closed after pressing 'd' again")
+	}
+}
+
+func TestDetailLayoutSplit(t *testing.T) {
+	cfg := config.DefaultConfig()
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 100
+	app.height = 30
+
+	board := makeTestBoard(3)
+	app.boardReady = true
+	app.board = NewBoardModel(board, cfg, 100, 26)
+
+	msg := tea.KeyPressMsg{Code: -1, Text: "d"}
+	result, _ := app.Update(msg)
+	a := result.(App)
+
+	expectedBoardWidth := 100 * 60 / 100
+	if a.board.width != expectedBoardWidth {
+		t.Errorf("expected board width %d, got %d", expectedBoardWidth, a.board.width)
+	}
+}
