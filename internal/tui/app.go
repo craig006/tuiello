@@ -372,7 +372,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				modal.MoveDown()
 			case "k", "up":
 				modal.MoveUp()
-			case " ":
+			case " ", "space":
 				modal.Toggle()
 			case "enter", "esc":
 				// Close modal and update search bar with selections
