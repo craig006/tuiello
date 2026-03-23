@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Client is an HTTP client for the Trello REST API.
@@ -282,4 +283,81 @@ func (c *Client) ReorderCard(cardID string, pos float64) error {
 	form := url.Values{}
 	form.Set("pos", fmt.Sprintf("%f", pos))
 	return c.put(fmt.Sprintf("/1/cards/%s", cardID), form)
+}
+
+// API response types for card actions (comments)
+type apiAction struct {
+	ID            string        `json:"id"`
+	Date          string        `json:"date"`
+	Data          apiActionData `json:"data"`
+	MemberCreator apiMember     `json:"memberCreator"`
+}
+
+type apiActionData struct {
+	Text string `json:"text"`
+}
+
+// FetchCardComments retrieves comments on a card.
+func (c *Client) FetchCardComments(cardID string) ([]Comment, error) {
+	var actions []apiAction
+	path := fmt.Sprintf("/1/cards/%s/actions?filter=commentCard&fields=data,date,idMemberCreator,memberCreator&memberCreator_fields=fullName,initials,username", cardID)
+	if err := c.get(path, &actions); err != nil {
+		return nil, err
+	}
+
+	comments := make([]Comment, 0, len(actions))
+	for _, a := range actions {
+		t, err := time.Parse(time.RFC3339, a.Date)
+		if err != nil {
+			t = time.Time{}
+		}
+		comments = append(comments, Comment{
+			ID:   a.ID,
+			Body: a.Data.Text,
+			Date: t,
+			Author: Member{
+				ID:       a.MemberCreator.ID,
+				FullName: a.MemberCreator.FullName,
+				Initials: a.MemberCreator.Initials,
+				Username: a.MemberCreator.Username,
+			},
+		})
+	}
+	return comments, nil
+}
+
+// API response types for checklists
+type apiChecklist struct {
+	ID         string         `json:"id"`
+	Name       string         `json:"name"`
+	CheckItems []apiCheckItem `json:"checkItems"`
+}
+
+type apiCheckItem struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
+// FetchCardChecklists retrieves checklists for a card.
+func (c *Client) FetchCardChecklists(cardID string) ([]Checklist, error) {
+	var raw []apiChecklist
+	path := fmt.Sprintf("/1/cards/%s/checklists?fields=name&checkItem_fields=name,state", cardID)
+	if err := c.get(path, &raw); err != nil {
+		return nil, err
+	}
+
+	checklists := make([]Checklist, 0, len(raw))
+	for _, cl := range raw {
+		checklist := Checklist{ID: cl.ID, Name: cl.Name}
+		for _, ci := range cl.CheckItems {
+			checklist.Items = append(checklist.Items, CheckItem{
+				ID:       ci.ID,
+				Name:     ci.Name,
+				Complete: ci.State == "complete",
+			})
+		}
+		checklists = append(checklists, checklist)
+	}
+	return checklists, nil
 }

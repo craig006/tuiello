@@ -137,3 +137,97 @@ func TestReorderCard(t *testing.T) {
 	err := c.ReorderCard("card1", 12345.0)
 	if err != nil { t.Fatalf("expected no error, got %v", err) }
 }
+
+func TestFetchCardComments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/1/cards/card1/actions" {
+			filter := r.URL.Query().Get("filter")
+			if filter != "commentCard" {
+				t.Errorf("expected filter=commentCard, got %q", filter)
+			}
+			resp := []map[string]interface{}{
+				{
+					"id":   "action1",
+					"date": "2026-03-20T10:30:00.000Z",
+					"data": map[string]interface{}{
+						"text": "This is a comment",
+					},
+					"memberCreator": map[string]interface{}{
+						"id":       "member1",
+						"fullName": "Craig Thomas",
+						"initials": "CT",
+						"username": "craigt",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := NewClient("testkey", "testtoken")
+	c.BaseURL = server.URL
+
+	comments, err := c.FetchCardComments("card1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("expected 1 comment, got %d", len(comments))
+	}
+	if comments[0].Body != "This is a comment" {
+		t.Errorf("expected body 'This is a comment', got %q", comments[0].Body)
+	}
+	if comments[0].Author.FullName != "Craig Thomas" {
+		t.Errorf("expected author 'Craig Thomas', got %q", comments[0].Author.FullName)
+	}
+	if comments[0].Date.Year() != 2026 {
+		t.Errorf("expected year 2026, got %d", comments[0].Date.Year())
+	}
+}
+
+func TestFetchCardChecklists(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/1/cards/card1/checklists" {
+			resp := []map[string]interface{}{
+				{
+					"id":   "cl1",
+					"name": "TODO",
+					"checkItems": []map[string]interface{}{
+						{"id": "ci1", "name": "First item", "state": "complete"},
+						{"id": "ci2", "name": "Second item", "state": "incomplete"},
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := NewClient("testkey", "testtoken")
+	c.BaseURL = server.URL
+
+	checklists, err := c.FetchCardChecklists("card1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(checklists) != 1 {
+		t.Fatalf("expected 1 checklist, got %d", len(checklists))
+	}
+	if checklists[0].Name != "TODO" {
+		t.Errorf("expected name 'TODO', got %q", checklists[0].Name)
+	}
+	if len(checklists[0].Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(checklists[0].Items))
+	}
+	if !checklists[0].Items[0].Complete {
+		t.Error("expected first item to be complete")
+	}
+	if checklists[0].Items[1].Complete {
+		t.Error("expected second item to be incomplete")
+	}
+}
