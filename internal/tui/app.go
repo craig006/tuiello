@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -80,13 +81,17 @@ type App struct {
 	promptInput    textinput.Model
 	showPrompt     bool
 	promptType     string // "confirm", "input", "menu"
+
+	// Filter search bar
+	searchInput   textinput.Model
+	searchFocused bool
 }
 
 func NewApp(client *trello.Client, cfg config.Config) App {
 	km := NewKeyMap(cfg.Keybinding)
 	palette := list.New(nil, list.NewDefaultDelegate(), 40, 20)
 	palette.Title = "Commands"
-	return App{
+	a := App{
 		client:         client,
 		config:         cfg,
 		keyMap:         km,
@@ -96,6 +101,12 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		commandPalette: palette,
 		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme)),
 	}
+	si := textinput.New()
+	si.Placeholder = "\uf002 Search..."
+	si.Prompt = ""
+	si.SetWidth(0) // will be set on first render
+	a.searchInput = si
+	return a
 }
 
 func (a App) Init() tea.Cmd {
@@ -160,11 +171,11 @@ func (a App) reorderCardCmd(cardID string, pos float64) tea.Cmd {
 
 func (a *App) updateDetailLayout() {
 	boardWidth := a.width * 60 / 100
-	panelWidth := a.width - boardWidth
+	panelWidth := a.width - boardWidth - 1 // 1 char spacer between board and detail
 	a.board.width = boardWidth
-	a.board.height = a.height - 4
+	a.board.height = a.height
 	a.board.ResizeColumns()
-	a.detail.SetSize(panelWidth, a.height-2)
+	a.detail.SetSize(panelWidth, a.height)
 }
 
 func (a App) fetchDetailData() tea.Cmd {
@@ -200,7 +211,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.updateDetailLayout()
 			} else {
 				a.board.width = msg.Width
-				a.board.height = msg.Height - 4
+				a.board.height = msg.Height
 				a.board.ResizeColumns()
 			}
 		}
@@ -209,7 +220,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case BoardFetchedMsg:
 		a.loading = false
 		a.boardReady = true
-		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height-4)
+		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height)
 		a.status = fmt.Sprintf("%s — %s", msg.Board.Name, a.board.PositionIndicator())
 		a.detail.open = false
 		a.detail.cardID = ""
@@ -336,6 +347,31 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, cmd
 		}
 
+		// Handle search bar input
+		if a.searchFocused {
+			switch msg.String() {
+			case "enter":
+				a.searchFocused = false
+				a.searchInput.Blur()
+				return a, nil
+			case "esc":
+				a.searchFocused = false
+				a.searchInput.Blur()
+				a.searchInput.SetValue("")
+				a.board.ClearFilter()
+				a.syncDetailAfterFilter()
+				return a, nil
+			default:
+				var cmd tea.Cmd
+				a.searchInput, cmd = a.searchInput.Update(msg)
+				// Live filtering on every keystroke
+				f := ParseFilter(a.searchInput.Value())
+				a.board.ApplyFilter(f)
+				a.syncDetailAfterFilter()
+				return a, cmd
+			}
+		}
+
 		switch {
 		case matchKey(msg, a.keyMap.Quit):
 			return a, tea.Quit
@@ -429,7 +465,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.updateDetailLayout()
 				} else {
 					a.board.width = a.width
-					a.board.height = a.height - 4
+					a.board.height = a.height
 					a.board.ResizeColumns()
 				}
 				return a, nil
@@ -464,6 +500,33 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case matchKey(msg, a.keyMap.DetailScrollUp):
 			if a.boardReady && a.detail.open {
 				a.detail.ScrollUp()
+				return a, nil
+			}
+
+		case matchKey(msg, a.keyMap.FilterFocus):
+			if a.boardReady && !a.showPalette {
+				a.searchFocused = true
+				a.searchInput.Focus()
+				return a, nil
+			}
+
+		case matchKey(msg, a.keyMap.FilterMembers):
+			if a.boardReady && !a.showPalette {
+				// Open member modal — implemented in Task 6
+				return a, nil
+			}
+
+		case matchKey(msg, a.keyMap.FilterLabels):
+			if a.boardReady && !a.showPalette {
+				// Open label modal — implemented in Task 6
+				return a, nil
+			}
+
+		case msg.String() == "esc":
+			if a.boardReady && !a.showPalette && !a.showPrompt && a.board.HasFilter() {
+				a.searchInput.SetValue("")
+				a.board.ClearFilter()
+				a.syncDetailAfterFilter()
 				return a, nil
 			}
 		}
@@ -698,6 +761,50 @@ func (a App) runCommand(cmd config.CustomCommandConfig, ctx commands.TemplateCon
 	}
 }
 
+func (a *App) syncDetailAfterFilter() {
+	if a.detail.open {
+		if card, _, ok := a.board.SelectedCard(); ok {
+			if card.ID != a.detail.cardID {
+				a.detail.SetCard(card)
+				if a.detail.NeedsFetch() {
+					a.detail.MarkLoading()
+				}
+			}
+		} else {
+			a.detail.SetCard(trello.Card{})
+		}
+	}
+}
+
+func (a App) renderFilterDisplay() string {
+	f := ParseFilter(a.searchInput.Value())
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4))
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
+
+	var parts []string
+	if f.Text != "" {
+		parts = append(parts, textStyle.Render(f.Text))
+	}
+	for _, m := range f.Members {
+		if strings.Contains(m, " ") {
+			parts = append(parts, tokenStyle.Render(fmt.Sprintf(`member:"%s"`, m)))
+		} else {
+			parts = append(parts, tokenStyle.Render("member:"+m))
+		}
+	}
+	for _, l := range f.Labels {
+		if strings.Contains(l, " ") {
+			parts = append(parts, tokenStyle.Render(fmt.Sprintf(`label:"%s"`, l)))
+		} else {
+			parts = append(parts, tokenStyle.Render("label:"+l))
+		}
+	}
+
+	icon := dimStyle.Render("\uf002 ")
+	return icon + strings.Join(parts, " ")
+}
+
 func matchKey(msg tea.KeyPressMsg, binding key.Binding) bool {
 	for _, k := range binding.Keys() {
 		if msg.String() == k {
@@ -728,8 +835,21 @@ func (a App) View() tea.View {
 	} else if a.loading {
 		content = "\n  Loading board...\n"
 	} else if a.boardReady {
+		// Render search bar
+		searchContent := a.searchInput.View()
+		if !a.searchFocused && a.searchInput.Value() != "" {
+			// Show the filter text with styled tokens when not focused
+			searchContent = a.renderFilterDisplay()
+		}
+		searchBar := lipgloss.NewStyle().
+			Width(a.board.width).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.ANSIColor(8)).
+			Render(searchContent)
+		a.board.SetSearchBar(searchBar)
+
 		if a.detail.open {
-			content = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), a.detail.View())
+			content = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
 		} else {
 			content = a.board.View()
 		}
@@ -737,12 +857,7 @@ func (a App) View() tea.View {
 		content = "\n  " + a.status + "\n"
 	}
 
-	statusBar := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Padding(0, 1).
-		Render(a.status)
-
-	view := lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
+	view := content
 
 	v := tea.NewView(view)
 	v.AltScreen = true

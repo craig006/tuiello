@@ -26,6 +26,7 @@ type BoardModel struct {
 	keyMap      KeyMap
 	theme       Theme
 	filter      Filter
+	searchBar   string
 }
 
 func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) BoardModel {
@@ -47,7 +48,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 	if cfg.GUI.ColumnWidth > 0 && colWidth < cfg.GUI.ColumnWidth {
 		colWidth = cfg.GUI.ColumnWidth
 	}
-	colHeight := height - 7 // 4 for chrome + 3 for breadcrumb border
+	colHeight := height - 10 // 4 for chrome + 3 for breadcrumb border + 3 for search bar
 
 	columns := make([]Column, len(board.Lists))
 	for i, l := range board.Lists {
@@ -78,7 +79,7 @@ func (b *BoardModel) ResizeColumns() {
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
 	}
-	colHeight := b.height - 5 // 3 for breadcrumb border + 2 for column border
+	colHeight := b.height - 8 // 3 for search bar + 3 for breadcrumb border + 2 for column border
 	for i := range b.columns {
 		b.columns[i].SetSize(colWidth-2, colHeight)
 	}
@@ -226,6 +227,11 @@ func (b *BoardModel) HasFilter() bool {
 	return !b.filter.IsEmpty()
 }
 
+// SetSearchBar sets the rendered search bar content to display above the breadcrumb.
+func (b *BoardModel) SetSearchBar(rendered string) {
+	b.searchBar = rendered
+}
+
 // CalcNewPos calculates the position value for inserting a card at a given index in a column.
 func CalcNewPos(cards []trello.Card, targetIdx int) float64 {
 	if len(cards) == 0 {
@@ -284,6 +290,19 @@ func (b BoardModel) View() string {
 		BorderForeground(lipgloss.ANSIColor(8)).
 		Render(breadcrumbText)
 
+	var header string
+	if b.searchBar != "" {
+		header = b.searchBar + "\n" + breadcrumb
+	} else {
+		header = breadcrumb
+	}
+
+	headerLines := 3 // breadcrumb
+	if b.searchBar != "" {
+		headerLines = 6 // search bar (3) + breadcrumb (3)
+	}
+	colH := b.height - headerLines
+
 	visibleCount := end - start
 	colWidth := b.width / visibleCount
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
@@ -306,8 +325,6 @@ func (b BoardModel) View() string {
 			w = b.width - colWidth*(visibleCount-1)
 		}
 
-		// Render content with border but we'll replace the top line
-		colH := b.height - 3 // subtract breadcrumb (3 lines with border)
 		style := lipgloss.NewStyle().
 			Width(w).
 			Height(colH).
@@ -344,5 +361,5 @@ func (b BoardModel) View() string {
 	}
 
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, views...)
-	return breadcrumb + "\n" + columns
+	return header + "\n" + columns
 }
