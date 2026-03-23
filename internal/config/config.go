@@ -1,0 +1,150 @@
+// internal/config/config.go
+package config
+
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	GUI            GUIConfig             `mapstructure:"gui"`
+	Board          BoardConfig           `mapstructure:"board"`
+	Keybinding     KeybindingConfig      `mapstructure:"keybinding"`
+	CustomCommands []CustomCommandConfig `mapstructure:"customCommands"`
+}
+
+type GUIConfig struct {
+	Theme          ThemeConfig `mapstructure:"theme"`
+	ColumnWidth    int         `mapstructure:"columnWidth"`
+	ShowCardLabels bool        `mapstructure:"showCardLabels"`
+}
+
+type ThemeConfig struct {
+	ActiveBorderColor   []string `mapstructure:"activeBorderColor"`
+	InactiveBorderColor []string `mapstructure:"inactiveBorderColor"`
+	SelectedCardColor   []string `mapstructure:"selectedCardColor"`
+	ColumnTitleColor    []string `mapstructure:"columnTitleColor"`
+}
+
+type BoardConfig struct {
+	ID   string `mapstructure:"id"`
+	Name string `mapstructure:"name"`
+}
+
+type KeybindingConfig struct {
+	Universal UniversalKeys `mapstructure:"universal"`
+	Board     BoardKeys     `mapstructure:"board"`
+}
+
+type UniversalKeys struct {
+	Quit    string `mapstructure:"quit"`
+	Help    string `mapstructure:"help"`
+	Refresh string `mapstructure:"refresh"`
+}
+
+type BoardKeys struct {
+	MoveLeft      string `mapstructure:"moveLeft"`
+	MoveRight     string `mapstructure:"moveRight"`
+	MoveUp        string `mapstructure:"moveUp"`
+	MoveDown      string `mapstructure:"moveDown"`
+	MoveCardLeft  string `mapstructure:"moveCardLeft"`
+	MoveCardRight string `mapstructure:"moveCardRight"`
+	MoveCardUp    string `mapstructure:"moveCardUp"`
+	MoveCardDown  string `mapstructure:"moveCardDown"`
+	Enter         string `mapstructure:"enter"`
+	CustomCommand string `mapstructure:"customCommand"`
+}
+
+type CustomCommandConfig struct {
+	Key         string         `mapstructure:"key"`
+	Description string         `mapstructure:"description"`
+	Command     string         `mapstructure:"command"`
+	Context     string         `mapstructure:"context"`
+	Output      string         `mapstructure:"output"`
+	Prompts     []PromptConfig `mapstructure:"prompts"`
+}
+
+type PromptConfig struct {
+	Type    string         `mapstructure:"type"`
+	Title   string         `mapstructure:"title"`
+	Key     string         `mapstructure:"key"`
+	Options []OptionConfig `mapstructure:"options"`
+}
+
+type OptionConfig struct {
+	Name  string `mapstructure:"name"`
+	Value string `mapstructure:"value"`
+}
+
+func DefaultConfig() Config {
+	return Config{
+		GUI: GUIConfig{
+			Theme: ThemeConfig{
+				ActiveBorderColor:   []string{"green", "bold"},
+				InactiveBorderColor: []string{"240"},
+				SelectedCardColor:   []string{"cyan"},
+				ColumnTitleColor:    []string{"magenta", "bold"},
+			},
+			ColumnWidth:    30,
+			ShowCardLabels: true,
+		},
+		Keybinding: KeybindingConfig{
+			Universal: UniversalKeys{
+				Quit:    "q",
+				Help:    "?",
+				Refresh: "r",
+			},
+			Board: BoardKeys{
+				MoveLeft:      "h",
+				MoveRight:     "l",
+				MoveUp:        "k",
+				MoveDown:      "j",
+				MoveCardLeft:  "H",
+				MoveCardRight: "L",
+				MoveCardUp:    "K",
+				MoveCardDown:  "J",
+				Enter:         "enter",
+				CustomCommand: "x",
+			},
+		},
+	}
+}
+
+// Load reads config with cascade: globalDir/config.yml → projectDir/.tuillo.yml.
+// Either path can be empty to skip that layer.
+func Load(globalDir, projectDir string) (Config, error) {
+	cfg := DefaultConfig()
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Load global config
+	if globalDir != "" {
+		v.SetConfigName("config")
+		v.AddConfigPath(globalDir)
+		if err := v.MergeInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				return cfg, err
+			}
+		}
+	}
+
+	// Load project-local config
+	if projectDir != "" {
+		v.SetConfigFile(filepath.Join(projectDir, ".tuillo.yml"))
+		if err := v.MergeInConfig(); err != nil {
+			// SetConfigFile returns os path errors (not ConfigFileNotFoundError) when file is absent
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok && !os.IsNotExist(err) {
+				return cfg, err
+			}
+		}
+	}
+
+	if err := v.Unmarshal(&cfg); err != nil {
+		return cfg, err
+	}
+
+	return cfg, nil
+}
