@@ -17,14 +17,15 @@ const maxVisibleColumns = 3
 
 // BoardModel manages the kanban board view with a 3-column sliding window.
 type BoardModel struct {
-	columns    []Column
-	board      *trello.Board
-	focused    int
-	width      int
-	height     int
+	columns     []Column
+	board       *trello.Board
+	focused     int
+	width       int
+	height      int
 	minColWidth int
-	keyMap     KeyMap
-	theme      Theme
+	keyMap      KeyMap
+	theme       Theme
+	filter      Filter
 }
 
 func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) BoardModel {
@@ -46,7 +47,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 	if cfg.GUI.ColumnWidth > 0 && colWidth < cfg.GUI.ColumnWidth {
 		colWidth = cfg.GUI.ColumnWidth
 	}
-	colHeight := height - 4
+	colHeight := height - 7 // 4 for chrome + 3 for breadcrumb border
 
 	columns := make([]Column, len(board.Lists))
 	for i, l := range board.Lists {
@@ -77,7 +78,7 @@ func (b *BoardModel) ResizeColumns() {
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
 	}
-	colHeight := b.height - 4
+	colHeight := b.height - 5 // 3 for breadcrumb border + 2 for column border
 	for i := range b.columns {
 		b.columns[i].SetSize(colWidth-2, colHeight)
 	}
@@ -162,14 +163,67 @@ func (b *BoardModel) rebuildColumnItems(colIdx int) {
 
 func (b *BoardModel) rebuildColumnItemsAt(colIdx int, selectIdx int) {
 	col := &b.columns[colIdx]
-	items := make([]list.Item, len(col.cards))
+	var items []list.Item
+	filteredIdx := -1
+	fi := 0
 	for i, c := range col.cards {
-		items[i] = cardItem{card: c}
+		if b.filter.MatchesCard(c) {
+			items = append(items, cardItem{card: c})
+			if i == selectIdx {
+				filteredIdx = fi
+			}
+			fi++
+		}
+	}
+	if items == nil {
+		items = []list.Item{}
 	}
 	col.list.SetItems(items)
-	if selectIdx >= 0 {
-		col.list.Select(selectIdx)
+	if filteredIdx >= 0 {
+		col.list.Select(filteredIdx)
+	} else if len(items) > 0 && col.list.Index() >= len(items) {
+		col.list.Select(len(items) - 1)
 	}
+}
+
+// ApplyFilter updates the filter and rebuilds all column item lists.
+func (b *BoardModel) ApplyFilter(f Filter) {
+	b.filter = f
+	for i := range b.columns {
+		b.rebuildFilteredItems(i)
+	}
+}
+
+// rebuildFilteredItems rebuilds a column's list items, applying the current filter.
+func (b *BoardModel) rebuildFilteredItems(colIdx int) {
+	col := &b.columns[colIdx]
+	var items []list.Item
+	for _, c := range col.cards {
+		if b.filter.MatchesCard(c) {
+			items = append(items, cardItem{card: c})
+		}
+	}
+	if items == nil {
+		items = []list.Item{}
+	}
+	col.list.SetItems(items)
+	// Clamp selection to valid range
+	if col.list.Index() >= len(items) && len(items) > 0 {
+		col.list.Select(len(items) - 1)
+	}
+}
+
+// ClearFilter removes all filters and rebuilds column items.
+func (b *BoardModel) ClearFilter() {
+	b.filter = Filter{}
+	for i := range b.columns {
+		b.rebuildFilteredItems(i)
+	}
+}
+
+// HasFilter returns true if any filter is active.
+func (b *BoardModel) HasFilter() bool {
+	return !b.filter.IsEmpty()
 }
 
 // CalcNewPos calculates the position value for inserting a card at a given index in a column.
@@ -202,12 +256,41 @@ func (b BoardModel) View() string {
 	}
 
 	start, end := b.VisibleRange()
-	colWidth := b.width / (end - start)
+
+	// Build breadcrumb bar showing all column names
+	var breadcrumbParts []string
+	for i, col := range b.columns {
+		name := col.name
+		var style lipgloss.Style
+		if i == b.focused {
+			// Selected column: blue, bold, underlined
+			style = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
+		} else if i >= start && i < end {
+			// Other visible columns: white
+			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
+		} else {
+			// Off-screen columns: grey
+			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+		}
+		breadcrumbParts = append(breadcrumbParts, style.Render(name))
+	}
+	separator := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" • ")
+	boardName := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Render(b.board.Name)
+	columnList := strings.Join(breadcrumbParts, separator)
+	breadcrumbText := boardName + "  " + columnList
+	breadcrumb := lipgloss.NewStyle().
+		Width(b.width).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(8)).
+		Render(breadcrumbText)
+
+	visibleCount := end - start
+	colWidth := b.width / visibleCount
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
 	}
 
-	views := make([]string, 0, end-start)
+	views := make([]string, 0, visibleCount)
 	border := lipgloss.RoundedBorder()
 	for i := start; i < end; i++ {
 		col := b.columns[i]
@@ -217,9 +300,17 @@ func (b BoardModel) View() string {
 			borderColor = b.theme.ActiveBorder.GetForeground()
 		}
 
+		// Give the last visible column any remaining width from rounding
+		w := colWidth
+		if i == end-1 {
+			w = b.width - colWidth*(visibleCount-1)
+		}
+
 		// Render content with border but we'll replace the top line
+		colH := b.height - 3 // subtract breadcrumb (3 lines with border)
 		style := lipgloss.NewStyle().
-			Width(colWidth - 2).
+			Width(w).
+			Height(colH).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor)
 
@@ -252,22 +343,6 @@ func (b BoardModel) View() string {
 		views = append(views, rendered)
 	}
 
-	// Equalize column heights so all columns fill the available space
-	targetHeight := b.height
-	for i, v := range views {
-		lines := strings.Split(v, "\n")
-		if len(lines) < targetHeight {
-			// Measure the visible width of any content line for padding
-			padWidth := 0
-			if len(lines) > 1 {
-				padWidth = lipgloss.Width(lines[1])
-			}
-			for len(lines) < targetHeight {
-				lines = append(lines[:len(lines)-1], strings.Repeat(" ", padWidth), lines[len(lines)-1])
-			}
-			views[i] = strings.Join(lines, "\n")
-		}
-	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, views...)
+	columns := lipgloss.JoinHorizontal(lipgloss.Top, views...)
+	return breadcrumb + "\n" + columns
 }
