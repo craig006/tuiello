@@ -36,6 +36,7 @@ type BoardConfig struct {
 type KeybindingConfig struct {
 	Universal UniversalKeys `mapstructure:"universal"`
 	Board     BoardKeys     `mapstructure:"board"`
+	Detail    DetailKeys    `mapstructure:"detail"`
 }
 
 type UniversalKeys struct {
@@ -55,6 +56,14 @@ type BoardKeys struct {
 	MoveCardDown  string `mapstructure:"moveCardDown"`
 	Enter         string `mapstructure:"enter"`
 	CustomCommand string `mapstructure:"customCommand"`
+}
+
+type DetailKeys struct {
+	Toggle     string `mapstructure:"toggle"`
+	TabPrev    string `mapstructure:"tabPrev"`
+	TabNext    string `mapstructure:"tabNext"`
+	ScrollDown string `mapstructure:"scrollDown"`
+	ScrollUp   string `mapstructure:"scrollUp"`
 }
 
 type CustomCommandConfig struct {
@@ -107,6 +116,13 @@ func DefaultConfig() Config {
 				MoveCardDown:  "J",
 				Enter:         "enter",
 				CustomCommand: "x",
+			},
+			Detail: DetailKeys{
+				Toggle:     "d",
+				TabPrev:    "[",
+				TabNext:    "]",
+				ScrollDown: "ctrl+j",
+				ScrollUp:   "ctrl+k",
 			},
 		},
 	}

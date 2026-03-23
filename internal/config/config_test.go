@@ -83,3 +83,22 @@ board:
 		t.Errorf("expected columnWidth 25, got %d", cfg.GUI.ColumnWidth)
 	}
 }
+
+func TestDefaultDetailKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Keybinding.Detail.Toggle != "d" {
+		t.Errorf("expected detail toggle 'd', got %q", cfg.Keybinding.Detail.Toggle)
+	}
+	if cfg.Keybinding.Detail.TabPrev != "[" {
+		t.Errorf("expected detail tabPrev '[', got %q", cfg.Keybinding.Detail.TabPrev)
+	}
+	if cfg.Keybinding.Detail.TabNext != "]" {
+		t.Errorf("expected detail tabNext ']', got %q", cfg.Keybinding.Detail.TabNext)
+	}
+	if cfg.Keybinding.Detail.ScrollDown != "ctrl+j" {
+		t.Errorf("expected detail scrollDown 'ctrl+j', got %q", cfg.Keybinding.Detail.ScrollDown)
+	}
+	if cfg.Keybinding.Detail.ScrollUp != "ctrl+k" {
+		t.Errorf("expected detail scrollUp 'ctrl+k', got %q", cfg.Keybinding.Detail.ScrollUp)
+	}
+}

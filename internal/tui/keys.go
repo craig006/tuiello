@@ -10,6 +10,8 @@ type KeyMap struct {
 	MoveLeft, MoveRight, MoveUp, MoveDown                 key.Binding
 	MoveCardLeft, MoveCardRight, MoveCardUp, MoveCardDown  key.Binding
 	Enter, CustomCommand                                    key.Binding
+	DetailToggle, DetailTabPrev, DetailTabNext             key.Binding
+	DetailScrollDown, DetailScrollUp                       key.Binding
 }
 
 func NewKeyMap(cfg config.KeybindingConfig) KeyMap {
@@ -27,5 +29,10 @@ func NewKeyMap(cfg config.KeybindingConfig) KeyMap {
 		MoveCardDown:  key.NewBinding(key.WithKeys(cfg.Board.MoveCardDown), key.WithHelp(cfg.Board.MoveCardDown, "move card down")),
 		Enter:         key.NewBinding(key.WithKeys(cfg.Board.Enter), key.WithHelp(cfg.Board.Enter, "select")),
 		CustomCommand: key.NewBinding(key.WithKeys(cfg.Board.CustomCommand), key.WithHelp(cfg.Board.CustomCommand, "commands")),
+		DetailToggle:     key.NewBinding(key.WithKeys(cfg.Detail.Toggle), key.WithHelp(cfg.Detail.Toggle, "detail panel")),
+		DetailTabPrev:    key.NewBinding(key.WithKeys(cfg.Detail.TabPrev), key.WithHelp(cfg.Detail.TabPrev, "prev tab")),
+		DetailTabNext:    key.NewBinding(key.WithKeys(cfg.Detail.TabNext), key.WithHelp(cfg.Detail.TabNext, "next tab")),
+		DetailScrollDown: key.NewBinding(key.WithKeys(cfg.Detail.ScrollDown), key.WithHelp(cfg.Detail.ScrollDown, "scroll down")),
+		DetailScrollUp:   key.NewBinding(key.WithKeys(cfg.Detail.ScrollUp), key.WithHelp(cfg.Detail.ScrollUp, "scroll up")),
 	}
 }
