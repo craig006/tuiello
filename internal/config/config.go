@@ -37,6 +37,13 @@ type KeybindingConfig struct {
 	Universal UniversalKeys `mapstructure:"universal"`
 	Board     BoardKeys     `mapstructure:"board"`
 	Detail    DetailKeys    `mapstructure:"detail"`
+	Filter    FilterKeys    `mapstructure:"filter"`
+}
+
+type FilterKeys struct {
+	Focus   string `mapstructure:"focus"`
+	Members string `mapstructure:"members"`
+	Labels  string `mapstructure:"labels"`
 }
 
 type UniversalKeys struct {
@@ -123,6 +130,11 @@ func DefaultConfig() Config {
 				TabNext:    "]",
 				ScrollDown: "ctrl+j",
 				ScrollUp:   "ctrl+k",
+			},
+			Filter: FilterKeys{
+				Focus:   "/",
+				Members: "ctrl+m",
+				Labels:  "ctrl+l",
 			},
 		},
 	}
