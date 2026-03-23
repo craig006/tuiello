@@ -84,29 +84,37 @@ func (c *Client) ValidateCredentials() error {
 }
 
 type apiBoard struct {
-	ID    string    `json:"id"`
-	Name  string    `json:"name"`
-	URL   string    `json:"url"`
-	Lists []apiList `json:"lists"`
+	ID           string           `json:"id"`
+	Name         string           `json:"name"`
+	URL          string           `json:"url"`
+	Lists        []apiList        `json:"lists"`
+	Cards        []apiCard        `json:"cards"`
+	Members      []apiMember      `json:"members"`
+	CustomFields []apiCustomField `json:"customFields"`
 }
 
 type apiList struct {
-	ID    string    `json:"id"`
-	Name  string    `json:"name"`
-	Pos   float64   `json:"pos"`
-	Cards []apiCard `json:"cards"`
+	ID   string  `json:"id"`
+	Name string  `json:"name"`
+	Pos  float64 `json:"pos"`
 }
 
 type apiCard struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Desc      string     `json:"desc"`
-	Pos       float64    `json:"pos"`
-	URL       string     `json:"url"`
-	IDList    string     `json:"idList"`
-	IDMembers []string   `json:"idMembers"`
-	IDLabels  []string   `json:"idLabels"`
-	Labels    []apiLabel `json:"labels"`
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	Desc             string              `json:"desc"`
+	Pos              float64             `json:"pos"`
+	URL              string              `json:"url"`
+	IDList           string              `json:"idList"`
+	IDMembers        []string            `json:"idMembers"`
+	IDLabels         []string            `json:"idLabels"`
+	Labels           []apiLabel          `json:"labels"`
+	Badges           apiBadges           `json:"badges"`
+	CustomFieldItems []apiCustomFieldItem `json:"customFieldItems"`
+}
+
+type apiBadges struct {
+	Comments int `json:"comments"`
 }
 
 type apiLabel struct {
@@ -115,31 +123,122 @@ type apiLabel struct {
 	Color string `json:"color"`
 }
 
+type apiMember struct {
+	ID       string `json:"id"`
+	FullName string `json:"fullName"`
+	Initials string `json:"initials"`
+	Username string `json:"username"`
+}
+
+type apiCustomField struct {
+	ID      string                `json:"id"`
+	Name    string                `json:"name"`
+	Type    string                `json:"type"`
+	Options []apiCustomFieldOption `json:"options"`
+}
+
+type apiCustomFieldOption struct {
+	ID    string                    `json:"id"`
+	Value apiCustomFieldOptionValue `json:"value"`
+	Color string                    `json:"color"`
+}
+
+type apiCustomFieldOptionValue struct {
+	Text string `json:"text"`
+}
+
+type apiCustomFieldItem struct {
+	ID            string                     `json:"id"`
+	IDCustomField string                     `json:"idCustomField"`
+	Value         map[string]string          `json:"value"`
+	IDValue       string                     `json:"idValue"`
+}
+
 // FetchBoard retrieves a board with its open lists and cards.
 func (c *Client) FetchBoard(boardID string) (*Board, error) {
 	var ab apiBoard
-	path := fmt.Sprintf("/1/boards/%s?lists=open&cards=open&card_fields=name,desc,labels,idMembers,url,pos,idList&list_fields=name,pos", boardID)
+	path := fmt.Sprintf("/1/boards/%s?lists=open&cards=open&card_fields=name,desc,labels,idMembers,url,pos,idList,badges&card_customFieldItems=true&list_fields=name,pos&members=all&member_fields=id,fullName,initials,username&customFields=true", boardID)
 	if err := c.get(path, &ab); err != nil {
 		return nil, err
 	}
-	board := &Board{ID: ab.ID, Name: ab.Name, URL: ab.URL}
-	for _, al := range ab.Lists {
-		list := List{ID: al.ID, Name: al.Name, Pos: al.Pos}
-		for _, ac := range al.Cards {
-			card := Card{
-				ID:          ac.ID,
-				Name:        ac.Name,
-				Description: ac.Desc,
-				Pos:         ac.Pos,
-				URL:         ac.URL,
-				MemberIDs:   ac.IDMembers,
-				ListID:      ac.IDList,
-			}
-			for _, lbl := range ac.Labels {
-				card.Labels = append(card.Labels, Label{ID: lbl.ID, Name: lbl.Name, Color: lbl.Color})
-			}
-			list.Cards = append(list.Cards, card)
+
+	// Build member lookup
+	memberMap := make(map[string]Member)
+	var boardMembers []Member
+	for _, am := range ab.Members {
+		m := Member{ID: am.ID, FullName: am.FullName, Initials: am.Initials, Username: am.Username}
+		memberMap[am.ID] = m
+		boardMembers = append(boardMembers, m)
+	}
+
+	// Build custom field definitions lookup
+	var boardCFDefs []CustomFieldDef
+	cfDefMap := make(map[string]CustomFieldDef)
+	// option ID -> (text, color)
+	cfOptionMap := make(map[string]CustomFieldOption)
+	for _, acf := range ab.CustomFields {
+		def := CustomFieldDef{ID: acf.ID, Name: acf.Name, Type: acf.Type}
+		for _, opt := range acf.Options {
+			o := CustomFieldOption{ID: opt.ID, Text: opt.Value.Text, Color: opt.Color}
+			def.Options = append(def.Options, o)
+			cfOptionMap[opt.ID] = o
 		}
+		cfDefMap[acf.ID] = def
+		boardCFDefs = append(boardCFDefs, def)
+	}
+
+	// Group cards by list ID
+	cardsByList := make(map[string][]Card)
+	for _, ac := range ab.Cards {
+		card := Card{
+			ID:           ac.ID,
+			Name:         ac.Name,
+			Description:  ac.Desc,
+			Pos:          ac.Pos,
+			URL:          ac.URL,
+			MemberIDs:    ac.IDMembers,
+			ListID:       ac.IDList,
+			CommentCount: ac.Badges.Comments,
+		}
+		for _, lbl := range ac.Labels {
+			card.Labels = append(card.Labels, Label{ID: lbl.ID, Name: lbl.Name, Color: lbl.Color})
+		}
+		// Resolve members
+		for _, mid := range ac.IDMembers {
+			if m, ok := memberMap[mid]; ok {
+				card.Members = append(card.Members, m)
+			}
+		}
+		// Resolve custom field values
+		for _, cfi := range ac.CustomFieldItems {
+			def, ok := cfDefMap[cfi.IDCustomField]
+			if !ok {
+				continue
+			}
+			cfv := CustomFieldValue{FieldName: def.Name}
+			if cfi.IDValue != "" {
+				// List-type field: resolve option
+				if opt, ok := cfOptionMap[cfi.IDValue]; ok {
+					cfv.Value = opt.Text
+					cfv.Color = opt.Color
+				}
+			} else if cfi.Value != nil {
+				// Other types: grab first value
+				for _, v := range cfi.Value {
+					cfv.Value = v
+					break
+				}
+			}
+			if cfv.Value != "" {
+				card.CustomFields = append(card.CustomFields, cfv)
+			}
+		}
+		cardsByList[ac.IDList] = append(cardsByList[ac.IDList], card)
+	}
+
+	board := &Board{ID: ab.ID, Name: ab.Name, URL: ab.URL, Members: boardMembers, CustomFields: boardCFDefs}
+	for _, al := range ab.Lists {
+		list := List{ID: al.ID, Name: al.Name, Pos: al.Pos, Cards: cardsByList[al.ID]}
 		board.Lists = append(board.Lists, list)
 	}
 	return board, nil

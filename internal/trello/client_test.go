@@ -43,11 +43,12 @@ func TestFetchBoard(t *testing.T) {
 			resp := map[string]interface{}{
 				"id": "board1", "name": "Test Board", "url": "https://trello.com/b/board1",
 				"lists": []map[string]interface{}{
-					{"id": "list1", "name": "Backlog", "pos": 1.0, "cards": []map[string]interface{}{
-						{"id": "card1", "name": "Card One", "pos": 1.0, "idList": "list1", "url": "https://trello.com/c/card1", "labels": []interface{}{}},
-						{"id": "card2", "name": "Card Two", "pos": 2.0, "idList": "list1", "url": "https://trello.com/c/card2", "labels": []interface{}{}},
-					}},
-					{"id": "list2", "name": "Done", "pos": 2.0, "cards": []map[string]interface{}{}},
+					{"id": "list1", "name": "Backlog", "pos": 1.0},
+					{"id": "list2", "name": "Done", "pos": 2.0},
+				},
+				"cards": []map[string]interface{}{
+					{"id": "card1", "name": "Card One", "pos": 1.0, "idList": "list1", "url": "https://trello.com/c/card1", "labels": []interface{}{}},
+					{"id": "card2", "name": "Card Two", "pos": 2.0, "idList": "list1", "url": "https://trello.com/c/card2", "labels": []interface{}{}},
 				},
 			}
 			json.NewEncoder(w).Encode(resp)

@@ -164,6 +164,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.boardReady {
 			a.board.width = msg.Width
 			a.board.height = msg.Height - 4
+			a.board.ResizeColumns()
 		}
 		return a, nil
 
@@ -408,10 +409,19 @@ func (a App) handleMoveCardUp() (tea.Model, tea.Cmd) {
 	}
 
 	cards := a.board.columns[colIdx].cards
-	cards[cardIdx], cards[cardIdx-1] = cards[cardIdx-1], cards[cardIdx]
-	a.board.rebuildColumnItems(colIdx)
 
-	newPos := CalcNewPos(cards, cardIdx-1)
+	// Calculate new position BEFORE the swap using the neighbors at the target index
+	var newPos float64
+	if cardIdx-1 == 0 {
+		newPos = cards[0].Pos / 2.0
+	} else {
+		newPos = (cards[cardIdx-2].Pos + cards[cardIdx-1].Pos) / 2.0
+	}
+
+	cards[cardIdx], cards[cardIdx-1] = cards[cardIdx-1], cards[cardIdx]
+	cards[cardIdx-1].Pos = newPos // Update local Pos so subsequent moves calculate correctly
+	a.board.rebuildColumnItemsAt(colIdx, cardIdx-1)
+
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
 
@@ -431,10 +441,18 @@ func (a App) handleMoveCardDown() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	cards[cardIdx], cards[cardIdx+1] = cards[cardIdx+1], cards[cardIdx]
-	a.board.rebuildColumnItems(colIdx)
+	// Calculate new position BEFORE the swap using the neighbors at the target index
+	var newPos float64
+	if cardIdx+1 >= len(cards)-1 {
+		newPos = cards[len(cards)-1].Pos + 65536.0
+	} else {
+		newPos = (cards[cardIdx+1].Pos + cards[cardIdx+2].Pos) / 2.0
+	}
 
-	newPos := CalcNewPos(cards, cardIdx+1)
+	cards[cardIdx], cards[cardIdx+1] = cards[cardIdx+1], cards[cardIdx]
+	cards[cardIdx+1].Pos = newPos // Update local Pos so subsequent moves calculate correctly
+	a.board.rebuildColumnItemsAt(colIdx, cardIdx+1)
+
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
 

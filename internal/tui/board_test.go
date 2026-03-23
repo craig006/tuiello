@@ -168,3 +168,51 @@ func TestCalcNewPosMiddle(t *testing.T) {
 		t.Errorf("expected 150.0, got %f", pos)
 	}
 }
+
+func TestMoveCardUpTwice(t *testing.T) {
+	board := makeTestBoard(3)
+	// Give list0 three cards
+	board.Lists[0].Cards = []trello.Card{
+		{ID: "c0", Name: "Card 0", Pos: 1.0, ListID: "list0"},
+		{ID: "c1", Name: "Card 1", Pos: 2.0, ListID: "list0"},
+		{ID: "c2", Name: "Card 2", Pos: 3.0, ListID: "list0"},
+	}
+	cfg := config.DefaultConfig()
+	b := NewBoardModel(board, cfg, 90, 30)
+
+	// Select card at index 2
+	b.columns[0].Select(2)
+	if b.columns[0].SelectedIndex() != 2 {
+		t.Fatalf("expected selected index 2, got %d", b.columns[0].SelectedIndex())
+	}
+
+	// First move up: swap index 2 and 1, select 1
+	cards := b.columns[0].cards
+	cards[2], cards[1] = cards[1], cards[2]
+	b.rebuildColumnItems(0)
+	b.columns[0].Select(1)
+
+	sel := b.columns[0].SelectedIndex()
+	if sel != 1 {
+		t.Fatalf("after first move: expected selected index 1, got %d", sel)
+	}
+	card, ok := b.columns[0].SelectedCard()
+	if !ok || card.ID != "c2" {
+		t.Fatalf("after first move: expected card c2, got %v", card)
+	}
+
+	// Second move up: swap index 1 and 0, select 0
+	cards = b.columns[0].cards
+	cards[1], cards[0] = cards[0], cards[1]
+	b.rebuildColumnItems(0)
+	b.columns[0].Select(0)
+
+	sel = b.columns[0].SelectedIndex()
+	if sel != 0 {
+		t.Fatalf("after second move: expected selected index 0, got %d", sel)
+	}
+	card, ok = b.columns[0].SelectedCard()
+	if !ok || card.ID != "c2" {
+		t.Fatalf("after second move: expected card c2, got %v (ok=%v)", card, ok)
+	}
+}

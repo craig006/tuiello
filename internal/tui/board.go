@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
@@ -52,7 +53,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 		columns[i] = NewColumn(l, colWidth, colHeight, i == 0)
 	}
 
-	return BoardModel{
+	bm := BoardModel{
 		columns:     columns,
 		board:       board,
 		focused:     0,
@@ -62,19 +63,41 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 		keyMap:      km,
 		theme:       theme,
 	}
+	bm.ResizeColumns()
+	return bm
+}
+
+// ResizeColumns updates all column dimensions to match current board size.
+func (b *BoardModel) ResizeColumns() {
+	if len(b.columns) == 0 {
+		return
+	}
+	visible := min(len(b.columns), maxVisibleColumns)
+	colWidth := b.width / visible
+	if b.minColWidth > 0 && colWidth < b.minColWidth {
+		colWidth = b.minColWidth
+	}
+	colHeight := b.height - 4
+	for i := range b.columns {
+		b.columns[i].SetSize(colWidth-2, colHeight)
+	}
 }
 
 func (b *BoardModel) FocusedColumn() int { return b.focused }
 
 func (b *BoardModel) FocusLeft() {
 	if b.focused > 0 {
+		b.columns[b.focused].SetFocused(false)
 		b.focused--
+		b.columns[b.focused].SetFocused(true)
 	}
 }
 
 func (b *BoardModel) FocusRight() {
 	if b.focused < len(b.columns)-1 {
+		b.columns[b.focused].SetFocused(false)
 		b.focused++
+		b.columns[b.focused].SetFocused(true)
 	}
 }
 
@@ -119,7 +142,7 @@ func (b *BoardModel) RemoveCard(colIdx, cardIdx int) trello.Card {
 	return card
 }
 
-// InsertCard inserts a card into the given column at the given position.
+// InsertCard inserts a card into the given column at the given position and selects it.
 func (b *BoardModel) InsertCard(colIdx int, card trello.Card, pos int) {
 	col := &b.columns[colIdx]
 	if pos > len(col.cards) {
@@ -130,17 +153,23 @@ func (b *BoardModel) InsertCard(colIdx int, card trello.Card, pos int) {
 	newCards = append(newCards, card)
 	newCards = append(newCards, col.cards[pos:]...)
 	col.cards = newCards
-	b.rebuildColumnItems(colIdx)
+	b.rebuildColumnItemsAt(colIdx, pos)
 }
 
 func (b *BoardModel) rebuildColumnItems(colIdx int) {
+	b.rebuildColumnItemsAt(colIdx, -1)
+}
+
+func (b *BoardModel) rebuildColumnItemsAt(colIdx int, selectIdx int) {
 	col := &b.columns[colIdx]
 	items := make([]list.Item, len(col.cards))
 	for i, c := range col.cards {
 		items[i] = cardItem{card: c}
 	}
 	col.list.SetItems(items)
-	col.list.Title = fmt.Sprintf("%s (%d)", col.name, len(col.cards))
+	if selectIdx >= 0 {
+		col.list.Select(selectIdx)
+	}
 }
 
 // CalcNewPos calculates the position value for inserting a card at a given index in a column.
@@ -179,21 +208,48 @@ func (b BoardModel) View() string {
 	}
 
 	views := make([]string, 0, end-start)
+	border := lipgloss.RoundedBorder()
 	for i := start; i < end; i++ {
 		col := b.columns[i]
-		col.SetSize(colWidth-2, b.height-4)
 
-		style := lipgloss.NewStyle().
-			Width(colWidth - 2).
-			Border(lipgloss.RoundedBorder())
-
+		borderColor := b.theme.InactiveBorder.GetForeground()
 		if i == b.focused {
-			style = style.BorderForeground(b.theme.ActiveBorder.GetForeground())
-		} else {
-			style = style.BorderForeground(b.theme.InactiveBorder.GetForeground())
+			borderColor = b.theme.ActiveBorder.GetForeground()
 		}
 
-		views = append(views, style.Render(col.View()))
+		// Render content with border but we'll replace the top line
+		style := lipgloss.NewStyle().
+			Width(colWidth - 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderColor)
+
+		rendered := style.Render(col.View())
+		lines := strings.Split(rendered, "\n")
+
+		// Build custom top border with embedded title, matching the
+		// exact visible width of the original rendered top border.
+		if len(lines) > 0 {
+			origWidth := lipgloss.Width(lines[0])
+			title := fmt.Sprintf(" %s (%d) ", col.name, len(col.cards))
+			titleLen := len([]rune(title))
+			// origWidth = left corner + dashes + right corner
+			// new line  = left corner + 1 dash + title + trailing dashes + right corner
+			trailingDashes := origWidth - 2 - 1 - titleLen // 2 corners, 1 leading dash
+			if trailingDashes < 0 {
+				trailingDashes = 0
+			}
+
+			borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+			titleStyle := lipgloss.NewStyle().Bold(true).Foreground(borderColor)
+
+			lines[0] = borderStyle.Render(border.TopLeft+border.Top) +
+				titleStyle.Render(title) +
+				borderStyle.Render(strings.Repeat(border.Top, trailingDashes)+border.TopRight)
+
+			rendered = strings.Join(lines, "\n")
+		}
+
+		views = append(views, rendered)
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, views...)

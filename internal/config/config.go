@@ -82,10 +82,10 @@ func DefaultConfig() Config {
 	return Config{
 		GUI: GUIConfig{
 			Theme: ThemeConfig{
-				ActiveBorderColor:   []string{"green", "bold"},
-				InactiveBorderColor: []string{"240"},
-				SelectedCardColor:   []string{"cyan"},
-				ColumnTitleColor:    []string{"magenta", "bold"},
+				ActiveBorderColor:   []string{"4", "bold"},
+				InactiveBorderColor: []string{"8"},
+				SelectedCardColor:   []string{"6"},
+				ColumnTitleColor:    []string{"5", "bold"},
 			},
 			ColumnWidth:    30,
 			ShowCardLabels: true,
