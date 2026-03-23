@@ -54,8 +54,9 @@ type DetailModel struct {
 
 	commentsLoaded   bool
 	checklistsLoaded bool
-	loading          bool
-	loadingErr       string
+	loading        bool
+	commentsErr    string
+	checklistsErr  string
 
 	viewport viewport.Model
 	width    int
@@ -86,8 +87,8 @@ func (d *DetailModel) PrevTab() {
 }
 
 // SetCard updates the displayed card and clears cached data.
-// Returns a tea.Cmd if the active tab needs a fetch.
-func (d *DetailModel) SetCard(card trello.Card) tea.Cmd {
+// After calling SetCard, check NeedsFetch() to determine if a fetch command is needed.
+func (d *DetailModel) SetCard(card trello.Card) {
 	d.card = card
 	d.cardID = card.ID
 	d.comments = nil
@@ -95,8 +96,11 @@ func (d *DetailModel) SetCard(card trello.Card) tea.Cmd {
 	d.commentsLoaded = false
 	d.checklistsLoaded = false
 	d.loading = false
-	d.loadingErr = ""
-	return d.fetchForActiveTab()
+	d.commentsErr = ""
+	d.checklistsErr = ""
+	if d.NeedsFetch() {
+		d.loading = true
+	}
 }
 
 func (d *DetailModel) SetSize(width, height int) {
@@ -122,7 +126,7 @@ func (d *DetailModel) HandleCommentsMsg(msg CardCommentsMsg) {
 	d.comments = msg.Comments
 	d.commentsLoaded = true
 	d.loading = false
-	d.loadingErr = ""
+	d.commentsErr = ""
 }
 
 func (d *DetailModel) HandleCommentsFetchErr(msg CardCommentsFetchErrMsg) {
@@ -130,7 +134,7 @@ func (d *DetailModel) HandleCommentsFetchErr(msg CardCommentsFetchErrMsg) {
 		return
 	}
 	d.loading = false
-	d.loadingErr = fmt.Sprintf("Failed to load comments: %v", msg.Err)
+	d.commentsErr = fmt.Sprintf("Failed to load comments: %v", msg.Err)
 }
 
 func (d *DetailModel) HandleChecklistsMsg(msg CardChecklistsMsg) {
@@ -140,7 +144,7 @@ func (d *DetailModel) HandleChecklistsMsg(msg CardChecklistsMsg) {
 	d.checklists = msg.Checklists
 	d.checklistsLoaded = true
 	d.loading = false
-	d.loadingErr = ""
+	d.checklistsErr = ""
 }
 
 func (d *DetailModel) HandleChecklistsFetchErr(msg CardChecklistsFetchErrMsg) {
@@ -148,23 +152,7 @@ func (d *DetailModel) HandleChecklistsFetchErr(msg CardChecklistsFetchErrMsg) {
 		return
 	}
 	d.loading = false
-	d.loadingErr = fmt.Sprintf("Failed to load checklists: %v", msg.Err)
-}
-
-// fetchForActiveTab sets the loading flag if the current tab has uncached data.
-// The caller (App) is responsible for providing the actual fetch command.
-func (d *DetailModel) fetchForActiveTab() tea.Cmd {
-	switch d.tab {
-	case tabComments:
-		if !d.commentsLoaded {
-			d.loading = true
-		}
-	case tabChecklists:
-		if !d.checklistsLoaded {
-			d.loading = true
-		}
-	}
-	return nil
+	d.checklistsErr = fmt.Sprintf("Failed to load checklists: %v", msg.Err)
 }
 
 // NeedsFetch returns true if the active tab needs data fetched.
@@ -200,16 +188,22 @@ func (d DetailModel) View() string {
 	var content string
 	if d.cardID == "" {
 		content = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("No card selected")
-	} else if d.loadingErr != "" {
-		content = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(1)).Render(d.loadingErr)
 	} else {
 		switch d.tab {
 		case tabOverview:
 			content = d.renderOverview(contentWidth)
 		case tabComments:
-			content = d.renderComments(contentWidth)
+			if d.commentsErr != "" {
+				content = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(1)).Render(d.commentsErr)
+			} else {
+				content = d.renderComments(contentWidth)
+			}
 		case tabChecklists:
-			content = d.renderChecklists(contentWidth)
+			if d.checklistsErr != "" {
+				content = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(1)).Render(d.checklistsErr)
+			} else {
+				content = d.renderChecklists(contentWidth)
+			}
 		}
 	}
 
