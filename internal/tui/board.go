@@ -331,7 +331,13 @@ func (b BoardModel) View() string {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor)
 
-		rendered := style.Render(col.View())
+		var colContent string
+		if len(col.list.Items()) == 0 && !b.filter.IsEmpty() {
+			colContent = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("No matching cards")
+		} else {
+			colContent = col.View()
+		}
+		rendered := style.Render(colContent)
 		lines := strings.Split(rendered, "\n")
 
 		// Build custom top border with embedded title, matching the

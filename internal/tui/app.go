@@ -227,6 +227,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.loading = false
 		a.boardReady = true
 		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height)
+		// Re-apply current filter if any
+		if a.searchInput.Value() != "" {
+			f := ParseFilter(a.searchInput.Value())
+			a.board.ApplyFilter(f)
+		}
 		a.status = fmt.Sprintf("%s — %s", msg.Board.Name, a.board.PositionIndicator())
 		a.detail.open = false
 		a.detail.cardID = ""
