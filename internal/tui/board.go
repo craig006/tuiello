@@ -220,6 +220,7 @@ func (b BoardModel) View() string {
 		// Render content with border but we'll replace the top line
 		style := lipgloss.NewStyle().
 			Width(colWidth - 2).
+			Height(b.height - 4).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor)
 

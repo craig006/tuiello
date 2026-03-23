@@ -232,13 +232,17 @@ func (d DetailModel) View() string {
 	borderColor := d.theme.ActiveBorder.GetForeground()
 	border := lipgloss.RoundedBorder()
 
-	// Build tab bar string
+	// Build tab bar string with dynamic labels
 	var tabBar string
 	for i, name := range tabNames {
+		label := name
+		if i == tabComments && d.card.CommentCount > 0 {
+			label = fmt.Sprintf("%s (%d)", name, d.card.CommentCount)
+		}
 		if i == d.tab {
-			tabBar += lipgloss.NewStyle().Bold(true).Foreground(borderColor).Render(" "+name+" ")
+			tabBar += lipgloss.NewStyle().Bold(true).Foreground(borderColor).Render(" "+label+" ")
 		} else {
-			tabBar += lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" "+name+" ")
+			tabBar += lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" "+label+" ")
 		}
 	}
 
@@ -293,14 +297,16 @@ func (d DetailModel) renderOverview(width int) string {
 	}
 
 	// Assignees
+	assigneeLabel := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Assignees: ")
 	if len(d.card.Members) > 0 {
 		var names []string
 		for _, m := range d.card.Members {
 			names = append(names, m.FullName)
 		}
-		assigneeLabel := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Assignees: ")
 		assigneeText := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Render(strings.Join(names, ", "))
 		sections = append(sections, assigneeLabel+assigneeText)
+	} else {
+		sections = append(sections, assigneeLabel+lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("-"))
 	}
 
 	// Description

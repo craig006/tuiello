@@ -369,6 +369,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.boardReady {
 				a.board.FocusLeft()
 				a.status = fmt.Sprintf("%s — %s", a.board.board.Name, a.board.PositionIndicator())
+				if a.detail.open {
+					if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
+						a.detail.SetCard(card)
+						if a.detail.NeedsFetch() {
+							a.detail.MarkLoading()
+							return a, a.fetchDetailData()
+						}
+					}
+				}
 			}
 			return a, nil
 
@@ -376,6 +385,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.boardReady {
 				a.board.FocusRight()
 				a.status = fmt.Sprintf("%s — %s", a.board.board.Name, a.board.PositionIndicator())
+				if a.detail.open {
+					if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
+						a.detail.SetCard(card)
+						if a.detail.NeedsFetch() {
+							a.detail.MarkLoading()
+							return a, a.fetchDetailData()
+						}
+					}
+				}
 			}
 			return a, nil
 
