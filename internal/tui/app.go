@@ -387,7 +387,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.board.ApplyFilter(currentFilter)
 				a.showMemberModal = false
 				a.showLabelModal = false
-				a.syncDetailAfterFilter()
+				fetchCmd := a.syncDetailAfterFilter()
+				return a, fetchCmd
 			}
 			return a, nil
 		}
@@ -404,15 +405,18 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.searchInput.Blur()
 				a.searchInput.SetValue("")
 				a.board.ClearFilter()
-				a.syncDetailAfterFilter()
-				return a, nil
+				fetchCmd := a.syncDetailAfterFilter()
+				return a, fetchCmd
 			default:
 				var cmd tea.Cmd
 				a.searchInput, cmd = a.searchInput.Update(msg)
 				// Live filtering on every keystroke
 				f := ParseFilter(a.searchInput.Value())
 				a.board.ApplyFilter(f)
-				a.syncDetailAfterFilter()
+				fetchCmd := a.syncDetailAfterFilter()
+				if fetchCmd != nil {
+					return a, tea.Batch(cmd, fetchCmd)
+				}
 				return a, cmd
 			}
 		}
@@ -602,8 +606,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 									break
 								}
 							}
-							ansiColor := trelloColorToANSI[lbl.Color]
-							if ansiColor == 0 && lbl.Color != "black" {
+							ansiColor, ok := trelloColorToANSI[lbl.Color]
+							if !ok {
 								ansiColor = lipgloss.ANSIColor(7)
 							}
 							items = append(items, MultiSelectItem{
@@ -624,8 +628,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.boardReady && !a.showPalette && !a.showPrompt && a.board.HasFilter() {
 				a.searchInput.SetValue("")
 				a.board.ClearFilter()
-				a.syncDetailAfterFilter()
-				return a, nil
+				fetchCmd := a.syncDetailAfterFilter()
+				return a, fetchCmd
 			}
 		}
 
@@ -649,6 +653,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// fullCardIndex finds the index of a card by ID in the full (unfiltered) cards slice.
+func fullCardIndex(cards []trello.Card, id string) int {
+	for i, c := range cards {
+		if c.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 func (a App) handleMoveCardLeft() (tea.Model, tea.Cmd) {
 	if !a.boardReady || a.board.focused == 0 {
 		return a, nil
@@ -659,7 +673,10 @@ func (a App) handleMoveCardLeft() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	cardIdx := a.board.columns[colIdx].SelectedIndex()
+	cardIdx := fullCardIndex(a.board.columns[colIdx].cards, card.ID)
+	if cardIdx < 0 {
+		return a, nil
+	}
 	targetCol := colIdx - 1
 	rb := moveRollback{Card: card, FromCol: colIdx, FromIdx: cardIdx, ToCol: targetCol}
 
@@ -682,7 +699,10 @@ func (a App) handleMoveCardRight() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	cardIdx := a.board.columns[colIdx].SelectedIndex()
+	cardIdx := fullCardIndex(a.board.columns[colIdx].cards, card.ID)
+	if cardIdx < 0 {
+		return a, nil
+	}
 	targetCol := colIdx + 1
 	rb := moveRollback{Card: card, FromCol: colIdx, FromIdx: cardIdx, ToCol: targetCol}
 
@@ -705,7 +725,7 @@ func (a App) handleMoveCardUp() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	cardIdx := a.board.columns[colIdx].SelectedIndex()
+	cardIdx := fullCardIndex(a.board.columns[colIdx].cards, card.ID)
 	if cardIdx <= 0 {
 		return a, nil
 	}
@@ -737,8 +757,11 @@ func (a App) handleMoveCardDown() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	cardIdx := a.board.columns[colIdx].SelectedIndex()
 	cards := a.board.columns[colIdx].cards
+	cardIdx := fullCardIndex(cards, card.ID)
+	if cardIdx < 0 {
+		return a, nil
+	}
 	if cardIdx >= len(cards)-1 {
 		return a, nil
 	}
@@ -859,19 +882,21 @@ func (a App) runCommand(cmd config.CustomCommandConfig, ctx commands.TemplateCon
 	}
 }
 
-func (a *App) syncDetailAfterFilter() {
+func (a *App) syncDetailAfterFilter() tea.Cmd {
 	if a.detail.open {
 		if card, _, ok := a.board.SelectedCard(); ok {
 			if card.ID != a.detail.cardID {
 				a.detail.SetCard(card)
 				if a.detail.NeedsFetch() {
 					a.detail.MarkLoading()
+					return a.fetchDetailData()
 				}
 			}
 		} else {
 			a.detail.SetCard(trello.Card{})
 		}
 	}
+	return nil
 }
 
 func (a App) renderFilterDisplay() string {
@@ -1001,6 +1026,10 @@ func (a App) renderHelp() string {
 		{a.keyMap.DetailTabPrev.Keys()[0] + "/" + a.keyMap.DetailTabNext.Keys()[0], "Switch detail tab"},
 		{a.keyMap.DetailScrollDown.Keys()[0], "Scroll detail down"},
 		{a.keyMap.DetailScrollUp.Keys()[0], "Scroll detail up"},
+		{a.keyMap.FilterFocus.Keys()[0], "Search/filter"},
+		{a.keyMap.FilterMembers.Keys()[0], "Filter by member"},
+		{a.keyMap.FilterLabels.Keys()[0], "Filter by label"},
+		{"esc", "Clear filters"},
 	}
 
 	lines := title + "\n\n"
