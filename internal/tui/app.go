@@ -403,6 +403,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						a.detail.SetCard(card)
 						a.updateDetailLayout()
 						if a.detail.NeedsFetch() {
+							a.detail.MarkLoading()
 							return a, a.fetchDetailData()
 						}
 						return a, nil
@@ -420,6 +421,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.boardReady && a.detail.open {
 				a.detail.NextTab()
 				if a.detail.NeedsFetch() {
+					a.detail.MarkLoading()
 					return a, a.fetchDetailData()
 				}
 				return a, nil
@@ -429,6 +431,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.boardReady && a.detail.open {
 				a.detail.PrevTab()
 				if a.detail.NeedsFetch() {
+					a.detail.MarkLoading()
 					return a, a.fetchDetailData()
 				}
 				return a, nil
@@ -436,16 +439,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.DetailScrollDown):
 			if a.boardReady && a.detail.open {
-				d, cmd := a.detail.Update(tea.KeyPressMsg{Code: 'j'})
-				a.detail = d
-				return a, cmd
+				a.detail.ScrollDown()
+				return a, nil
 			}
 
 		case matchKey(msg, a.keyMap.DetailScrollUp):
 			if a.boardReady && a.detail.open {
-				d, cmd := a.detail.Update(tea.KeyPressMsg{Code: 'k'})
-				a.detail = d
-				return a, cmd
+				a.detail.ScrollUp()
+				return a, nil
 			}
 		}
 
@@ -457,6 +458,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
 					a.detail.SetCard(card)
 					if a.detail.NeedsFetch() {
+						a.detail.MarkLoading()
 						return a, tea.Batch(cmd, a.fetchDetailData())
 					}
 				}

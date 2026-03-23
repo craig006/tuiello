@@ -54,7 +54,8 @@ type DetailModel struct {
 
 	commentsLoaded   bool
 	checklistsLoaded bool
-	loading        bool
+	commentsLoading  bool
+	checklistsLoading bool
 	commentsErr    string
 	checklistsErr  string
 
@@ -95,12 +96,10 @@ func (d *DetailModel) SetCard(card trello.Card) {
 	d.checklists = nil
 	d.commentsLoaded = false
 	d.checklistsLoaded = false
-	d.loading = false
+	d.commentsLoading = false
+	d.checklistsLoading = false
 	d.commentsErr = ""
 	d.checklistsErr = ""
-	if d.NeedsFetch() {
-		d.loading = true
-	}
 }
 
 func (d *DetailModel) SetSize(width, height int) {
@@ -125,7 +124,7 @@ func (d *DetailModel) HandleCommentsMsg(msg CardCommentsMsg) {
 	}
 	d.comments = msg.Comments
 	d.commentsLoaded = true
-	d.loading = false
+	d.commentsLoading = false
 	d.commentsErr = ""
 }
 
@@ -133,7 +132,7 @@ func (d *DetailModel) HandleCommentsFetchErr(msg CardCommentsFetchErrMsg) {
 	if msg.CardID != d.cardID {
 		return
 	}
-	d.loading = false
+	d.commentsLoading = false
 	d.commentsErr = fmt.Sprintf("Failed to load comments: %v", msg.Err)
 }
 
@@ -143,7 +142,7 @@ func (d *DetailModel) HandleChecklistsMsg(msg CardChecklistsMsg) {
 	}
 	d.checklists = msg.Checklists
 	d.checklistsLoaded = true
-	d.loading = false
+	d.checklistsLoading = false
 	d.checklistsErr = ""
 }
 
@@ -151,7 +150,7 @@ func (d *DetailModel) HandleChecklistsFetchErr(msg CardChecklistsFetchErrMsg) {
 	if msg.CardID != d.cardID {
 		return
 	}
-	d.loading = false
+	d.checklistsLoading = false
 	d.checklistsErr = fmt.Sprintf("Failed to load checklists: %v", msg.Err)
 }
 
@@ -164,6 +163,26 @@ func (d *DetailModel) NeedsFetch() bool {
 		return !d.checklistsLoaded
 	}
 	return false
+}
+
+// ScrollDown scrolls the viewport down by one line.
+func (d *DetailModel) ScrollDown() {
+	d.viewport.ScrollDown(1)
+}
+
+// ScrollUp scrolls the viewport up by one line.
+func (d *DetailModel) ScrollUp() {
+	d.viewport.ScrollUp(1)
+}
+
+// MarkLoading sets the loading flag for the active tab.
+func (d *DetailModel) MarkLoading() {
+	switch d.tab {
+	case tabComments:
+		d.commentsLoading = true
+	case tabChecklists:
+		d.checklistsLoading = true
+	}
 }
 
 // Update handles viewport scrolling messages.
@@ -297,7 +316,7 @@ func (d DetailModel) renderOverview(width int) string {
 }
 
 func (d DetailModel) renderComments(width int) string {
-	if d.loading {
+	if d.commentsLoading {
 		return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Loading comments...")
 	}
 	if len(d.comments) == 0 {
@@ -323,7 +342,7 @@ func (d DetailModel) renderComments(width int) string {
 }
 
 func (d DetailModel) renderChecklists(width int) string {
-	if d.loading {
+	if d.checklistsLoading {
 		return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Loading checklists...")
 	}
 	if len(d.checklists) == 0 {
