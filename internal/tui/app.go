@@ -6,9 +6,12 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/craig006/tuillo/internal/commands"
 	"github.com/craig006/tuillo/internal/config"
 	"github.com/craig006/tuillo/internal/trello"
 )
@@ -43,6 +46,15 @@ type StatusMsg struct {
 	Text string
 }
 
+// commandItem wraps a custom command for display in the command palette.
+type commandItem struct {
+	cmd config.CustomCommandConfig
+}
+
+func (c commandItem) Title() string       { return c.cmd.Description }
+func (c commandItem) Description() string { return c.cmd.Key }
+func (c commandItem) FilterValue() string { return c.cmd.Description }
+
 // App is the root Bubble Tea model.
 type App struct {
 	board      BoardModel
@@ -56,17 +68,31 @@ type App struct {
 	width      int
 	height     int
 	boardReady bool
+
+	// Command palette
+	commandPalette list.Model
+	showPalette    bool
+	// Prompt flow
+	pendingCommand *config.CustomCommandConfig
+	pendingCtx     commands.TemplateContext
+	promptIdx      int
+	promptInput    textinput.Model
+	showPrompt     bool
+	promptType     string // "confirm", "input", "menu"
 }
 
 func NewApp(client *trello.Client, cfg config.Config) App {
 	km := NewKeyMap(cfg.Keybinding)
+	palette := list.New(nil, list.NewDefaultDelegate(), 40, 20)
+	palette.Title = "Commands"
 	return App{
-		client:  client,
-		config:  cfg,
-		keyMap:  km,
-		help:    help.New(),
-		status:  "Loading board...",
-		loading: true,
+		client:         client,
+		config:         cfg,
+		keyMap:         km,
+		help:           help.New(),
+		status:         "Loading board...",
+		loading:        true,
+		commandPalette: palette,
 	}
 }
 
@@ -181,6 +207,78 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case tea.KeyPressMsg:
+		// Handle active prompts
+		if a.showPrompt && a.pendingCommand != nil {
+			prompt := a.pendingCommand.Prompts[a.promptIdx]
+			switch a.promptType {
+			case "confirm":
+				if msg.String() == "y" {
+					a.promptIdx++
+					a.showPrompt = false
+					return a.showNextPrompt()
+				}
+				if msg.String() == "n" || msg.String() == "esc" {
+					a.pendingCommand = nil
+					a.showPrompt = false
+					a.status = "Cancelled"
+					return a, nil
+				}
+			case "input":
+				if msg.String() == "enter" {
+					a.pendingCtx.Prompt[prompt.Key] = a.promptInput.Value()
+					a.promptIdx++
+					a.showPrompt = false
+					return a.showNextPrompt()
+				}
+				if msg.String() == "esc" {
+					a.pendingCommand = nil
+					a.showPrompt = false
+					a.status = "Cancelled"
+					return a, nil
+				}
+				var cmd tea.Cmd
+				a.promptInput, cmd = a.promptInput.Update(msg)
+				return a, cmd
+			case "menu":
+				if msg.String() == "esc" {
+					a.pendingCommand = nil
+					a.showPrompt = false
+					a.showPalette = false
+					a.status = "Cancelled"
+					return a, nil
+				}
+				if msg.String() == "enter" {
+					if item, ok := a.commandPalette.SelectedItem().(commandItem); ok {
+						a.pendingCtx.Prompt[prompt.Key] = item.cmd.Key
+						a.promptIdx++
+						a.showPrompt = false
+						a.showPalette = false
+						return a.showNextPrompt()
+					}
+				}
+				var cmd tea.Cmd
+				a.commandPalette, cmd = a.commandPalette.Update(msg)
+				return a, cmd
+			}
+		}
+
+		// Handle command palette
+		if a.showPalette {
+			if msg.String() == "esc" {
+				a.showPalette = false
+				return a, nil
+			}
+			if msg.String() == "enter" {
+				if item, ok := a.commandPalette.SelectedItem().(commandItem); ok {
+					a.showPalette = false
+					return a.executeCustomCommand(item.cmd)
+				}
+			}
+			var cmd tea.Cmd
+			a.commandPalette, cmd = a.commandPalette.Update(msg)
+			return a, cmd
+		}
+
 		switch {
 		case matchKey(msg, a.keyMap.Quit):
 			return a, tea.Quit
@@ -196,6 +294,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, a.fetchBoardCmd(a.config.Board.ID)
 			}
 			return a, nil
+
+		case matchKey(msg, a.keyMap.CustomCommand):
+			if a.boardReady && !a.showPalette {
+				filtered := commands.FilterByContext(a.config.CustomCommands, "card")
+				items := make([]list.Item, len(filtered))
+				for i, cmd := range filtered {
+					items[i] = commandItem{cmd: cmd}
+				}
+				a.commandPalette.SetItems(items)
+				a.commandPalette.SetFilteringEnabled(true)
+				a.showPalette = true
+				return a, nil
+			}
 
 		case matchKey(msg, a.keyMap.MoveLeft):
 			if a.boardReady {
@@ -327,6 +438,107 @@ func (a App) handleMoveCardDown() (tea.Model, tea.Cmd) {
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
 
+func (a App) executeCustomCommand(cmd config.CustomCommandConfig) (tea.Model, tea.Cmd) {
+	card, colIdx, ok := a.board.SelectedCard()
+	if !ok {
+		a.status = "No card selected"
+		return a, nil
+	}
+
+	col := a.board.columns[colIdx]
+	ctx := commands.BuildContext(card, trello.List{ID: col.ListID(), Name: col.Title()}, *a.board.board)
+
+	// If command has prompts, start the prompt flow
+	if len(cmd.Prompts) > 0 {
+		a.pendingCommand = &cmd
+		a.pendingCtx = ctx
+		a.promptIdx = 0
+		return a.showNextPrompt()
+	}
+
+	// No prompts — execute immediately
+	return a.runCommand(cmd, ctx)
+}
+
+func (a App) showNextPrompt() (tea.Model, tea.Cmd) {
+	if a.promptIdx >= len(a.pendingCommand.Prompts) {
+		// All prompts done, execute the command
+		cmd := *a.pendingCommand
+		ctx := a.pendingCtx
+		a.pendingCommand = nil
+		a.showPrompt = false
+		return a.runCommand(cmd, ctx)
+	}
+
+	prompt := a.pendingCommand.Prompts[a.promptIdx]
+	a.showPrompt = true
+	a.promptType = prompt.Type
+
+	// Render the title template with current context
+	title, err := commands.RenderTemplate(prompt.Title, a.pendingCtx)
+	if err != nil {
+		a.status = fmt.Sprintf("Prompt template error: %v", err)
+		a.pendingCommand = nil
+		a.showPrompt = false
+		return a, nil
+	}
+
+	switch prompt.Type {
+	case "confirm":
+		a.status = title + " (y/n)"
+	case "input":
+		ti := textinput.New()
+		ti.Placeholder = title
+		ti.Focus()
+		a.promptInput = ti
+	case "menu":
+		// Reuse command palette for menu options
+		items := make([]list.Item, len(prompt.Options))
+		for i, opt := range prompt.Options {
+			items[i] = commandItem{cmd: config.CustomCommandConfig{Description: opt.Name, Key: opt.Value}}
+		}
+		a.commandPalette.SetItems(items)
+		a.showPalette = true
+	}
+
+	return a, nil
+}
+
+func (a App) runCommand(cmd config.CustomCommandConfig, ctx commands.TemplateContext) (tea.Model, tea.Cmd) {
+	rendered, err := commands.RenderTemplate(cmd.Command, ctx)
+	if err != nil {
+		a.status = fmt.Sprintf("Template error: %v", err)
+		return a, nil
+	}
+
+	switch cmd.Output {
+	case "terminal":
+		c := commands.ExecuteTerminal(rendered)
+		return a, tea.ExecProcess(c, func(err error) tea.Msg {
+			if err != nil {
+				return StatusMsg{Text: fmt.Sprintf("Command failed: %v", err)}
+			}
+			return StatusMsg{Text: "Command completed"}
+		})
+	case "popup":
+		return a, func() tea.Msg {
+			output, err := commands.ExecuteSilent(rendered)
+			if err != nil {
+				return StatusMsg{Text: fmt.Sprintf("Error: %v — %s", err, output)}
+			}
+			return StatusMsg{Text: output}
+		}
+	default: // "none"
+		return a, func() tea.Msg {
+			_, err := commands.ExecuteSilent(rendered)
+			if err != nil {
+				return StatusMsg{Text: fmt.Sprintf("Command failed: %v", err)}
+			}
+			return StatusMsg{Text: "Command executed"}
+		}
+	}
+}
+
 func matchKey(msg tea.KeyPressMsg, binding key.Binding) bool {
 	for _, k := range binding.Keys() {
 		if msg.String() == k {
@@ -344,7 +556,17 @@ func (a App) View() tea.View {
 	}
 
 	var content string
-	if a.loading {
+	if a.showPalette {
+		paletteView := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("cyan")).
+			Padding(1).
+			Width(a.width / 2).
+			Render(a.commandPalette.View())
+		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, paletteView)
+	} else if a.showPrompt && a.promptType == "input" {
+		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, a.promptInput.View())
+	} else if a.loading {
 		content = "\n  Loading board...\n"
 	} else if a.boardReady {
 		content = a.board.View()
