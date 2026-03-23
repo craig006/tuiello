@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/craig006/tuillo/internal/config"
+	"github.com/craig006/tuillo/internal/trello"
+	"github.com/craig006/tuillo/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -43,8 +47,29 @@ var rootCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("Board ID: %q, Board Name: %q\n", appConfig.Board.ID, appConfig.Board.Name)
-		return nil
+		apiKey := os.Getenv("TRELLO_API_KEY")
+		token := os.Getenv("TRELLO_TOKEN")
+
+		if apiKey == "" || token == "" {
+			return fmt.Errorf("missing Trello credentials.\n\n" +
+				"Set these environment variables:\n" +
+				"  export TRELLO_API_KEY=<your-api-key>\n" +
+				"  export TRELLO_TOKEN=<your-token>\n\n" +
+				"Get your API key at: https://trello.com/power-ups/admin\n" +
+				"Then authorize a token at:\n" +
+				"  https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=<YOUR_KEY>")
+		}
+
+		client := trello.NewClient(apiKey, token)
+
+		if err := client.ValidateCredentials(); err != nil {
+			return fmt.Errorf("invalid credentials: %w", err)
+		}
+
+		app := tui.NewApp(client, appConfig)
+		p := tea.NewProgram(app)
+		_, err := p.Run()
+		return err
 	},
 }
 
