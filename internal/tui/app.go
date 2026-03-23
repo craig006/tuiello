@@ -85,6 +85,12 @@ type App struct {
 	// Filter search bar
 	searchInput   textinput.Model
 	searchFocused bool
+
+	// Filter modals
+	showMemberModal bool
+	showLabelModal  bool
+	memberModal     MultiSelectModel
+	labelModal      MultiSelectModel
 }
 
 func NewApp(client *trello.Client, cfg config.Config) App {
@@ -347,6 +353,40 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, cmd
 		}
 
+		// Handle member/label modals
+		if a.showMemberModal || a.showLabelModal {
+			modal := &a.memberModal
+			isLabel := false
+			if a.showLabelModal {
+				modal = &a.labelModal
+				isLabel = true
+			}
+
+			switch msg.String() {
+			case "j", "down":
+				modal.MoveDown()
+			case "k", "up":
+				modal.MoveUp()
+			case " ":
+				modal.Toggle()
+			case "enter", "esc":
+				// Close modal and update search bar with selections
+				selected := modal.Selected()
+				currentFilter := ParseFilter(a.searchInput.Value())
+				if isLabel {
+					currentFilter.Labels = selected
+				} else {
+					currentFilter.Members = selected
+				}
+				a.searchInput.SetValue(BuildFilterText(currentFilter))
+				a.board.ApplyFilter(currentFilter)
+				a.showMemberModal = false
+				a.showLabelModal = false
+				a.syncDetailAfterFilter()
+			}
+			return a, nil
+		}
+
 		// Handle search bar input
 		if a.searchFocused {
 			switch msg.String() {
@@ -511,14 +551,67 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case matchKey(msg, a.keyMap.FilterMembers):
-			if a.boardReady && !a.showPalette {
-				// Open member modal — implemented in Task 6
+			if a.boardReady && !a.showPalette && !a.searchFocused {
+				currentFilter := ParseFilter(a.searchInput.Value())
+				var items []MultiSelectItem
+				for _, m := range a.board.board.Members {
+					checked := false
+					for _, fm := range currentFilter.Members {
+						if strings.EqualFold(fm, m.Username) || strings.EqualFold(fm, m.FullName) {
+							checked = true
+							break
+						}
+					}
+					items = append(items, MultiSelectItem{
+						Label:   m.FullName,
+						Value:   m.Username,
+						Checked: checked,
+					})
+				}
+				a.memberModal = NewMultiSelectModel("Filter by Member", items)
+				a.showMemberModal = true
 				return a, nil
 			}
 
 		case matchKey(msg, a.keyMap.FilterLabels):
-			if a.boardReady && !a.showPalette {
-				// Open label modal — implemented in Task 6
+			if a.boardReady && !a.showPalette && !a.searchFocused {
+				currentFilter := ParseFilter(a.searchInput.Value())
+				// Collect unique labels from all cards across all columns
+				seen := make(map[string]bool)
+				var items []MultiSelectItem
+				for _, col := range a.board.columns {
+					for _, card := range col.cards {
+						for _, lbl := range card.Labels {
+							name := lbl.Name
+							if name == "" {
+								name = lbl.Color
+							}
+							if seen[name] {
+								continue
+							}
+							seen[name] = true
+							checked := false
+							for _, fl := range currentFilter.Labels {
+								if strings.EqualFold(fl, name) {
+									checked = true
+									break
+								}
+							}
+							ansiColor := trelloColorToANSI[lbl.Color]
+							if ansiColor == 0 && lbl.Color != "black" {
+								ansiColor = lipgloss.ANSIColor(7)
+							}
+							items = append(items, MultiSelectItem{
+								Label:   name,
+								Value:   name,
+								Checked: checked,
+								Color:   ansiColor,
+							})
+						}
+					}
+				}
+				a.labelModal = NewMultiSelectModel("Filter by Label", items)
+				a.showLabelModal = true
 				return a, nil
 			}
 
@@ -852,6 +945,25 @@ func (a App) View() tea.View {
 			content = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
 		} else {
 			content = a.board.View()
+		}
+
+		// Overlay member/label modal if open
+		if a.showMemberModal {
+			modalView := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("cyan")).
+				Padding(1).
+				Width(a.width / 3).
+				Render(a.memberModal.View())
+			content = lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, modalView)
+		} else if a.showLabelModal {
+			modalView := lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("cyan")).
+				Padding(1).
+				Width(a.width / 3).
+				Render(a.labelModal.View())
+			content = lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, modalView)
 		}
 	} else {
 		content = "\n  " + a.status + "\n"
