@@ -393,6 +393,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.DetailToggle):
 			if a.boardReady {
+				if !a.detail.open && a.width < 80 {
+					a.status = "Terminal too narrow for detail panel"
+					return a, nil
+				}
 				a.detail.Toggle()
 				if a.detail.open {
 					if card, _, ok := a.board.SelectedCard(); ok {

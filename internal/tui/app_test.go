@@ -125,9 +125,11 @@ func TestDetailToggleKey(t *testing.T) {
 	client := trello.NewClient("key", "token")
 	app := NewApp(client, cfg)
 
+	app.width = 120
+	app.height = 30
 	board := makeTestBoard(3)
 	app.boardReady = true
-	app.board = NewBoardModel(board, cfg, 80, 24)
+	app.board = NewBoardModel(board, cfg, 120, 26)
 
 	msg := tea.KeyPressMsg{Code: -1, Text: "d"}
 	result, _ := app.Update(msg)
