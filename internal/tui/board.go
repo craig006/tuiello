@@ -214,11 +214,30 @@ func (b *BoardModel) rebuildFilteredItems(colIdx int) {
 	}
 }
 
-// ClearFilter removes all filters and rebuilds column items.
+// ClearFilter removes all filters and rebuilds column items,
+// preserving the currently selected card in each column.
 func (b *BoardModel) ClearFilter() {
+	// Remember the selected card in each column before clearing
+	selectedIDs := make([]string, len(b.columns))
+	for i, col := range b.columns {
+		item := col.list.SelectedItem()
+		if item != nil {
+			if ci, ok := item.(cardItem); ok {
+				selectedIDs[i] = ci.card.ID
+			}
+		}
+	}
+
 	b.filter = Filter{}
 	for i := range b.columns {
 		b.rebuildFilteredItems(i)
+		// Re-select the card that was selected before clearing
+		if selectedIDs[i] != "" {
+			idx := fullCardIndex(b.columns[i].cards, selectedIDs[i])
+			if idx >= 0 {
+				b.columns[i].list.Select(idx)
+			}
+		}
 	}
 }
 

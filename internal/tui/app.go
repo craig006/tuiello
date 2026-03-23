@@ -725,24 +725,45 @@ func (a App) handleMoveCardUp() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	cardIdx := fullCardIndex(a.board.columns[colIdx].cards, card.ID)
+	cards := a.board.columns[colIdx].cards
+	cardIdx := fullCardIndex(cards, card.ID)
 	if cardIdx <= 0 {
 		return a, nil
 	}
 
-	cards := a.board.columns[colIdx].cards
-
-	// Calculate new position BEFORE the swap using the neighbors at the target index
-	var newPos float64
-	if cardIdx-1 == 0 {
-		newPos = cards[0].Pos / 2.0
-	} else {
-		newPos = (cards[cardIdx-2].Pos + cards[cardIdx-1].Pos) / 2.0
+	// Find the target position: skip past hidden cards to the previous visible card
+	targetIdx := cardIdx - 1
+	if a.board.HasFilter() {
+		for targetIdx > 0 && !a.board.filter.MatchesCard(cards[targetIdx]) {
+			targetIdx--
+		}
+		// If target is not visible and we're at 0, move above it anyway
+	}
+	if targetIdx == cardIdx {
+		return a, nil
 	}
 
-	cards[cardIdx], cards[cardIdx-1] = cards[cardIdx-1], cards[cardIdx]
-	cards[cardIdx-1].Pos = newPos // Update local Pos so subsequent moves calculate correctly
-	a.board.rebuildColumnItemsAt(colIdx, cardIdx-1)
+	// Calculate new position BEFORE the move
+	var newPos float64
+	if targetIdx == 0 {
+		newPos = cards[0].Pos / 2.0
+	} else {
+		newPos = (cards[targetIdx-1].Pos + cards[targetIdx].Pos) / 2.0
+	}
+
+	// Remove card from current position and insert at target
+	removed := cards[cardIdx]
+	copy(cards[cardIdx:], cards[cardIdx+1:])
+	a.board.columns[colIdx].cards = cards[:len(cards)-1]
+	cards = a.board.columns[colIdx].cards
+
+	newCards := make([]trello.Card, 0, len(cards)+1)
+	newCards = append(newCards, cards[:targetIdx]...)
+	removed.Pos = newPos
+	newCards = append(newCards, removed)
+	newCards = append(newCards, cards[targetIdx:]...)
+	a.board.columns[colIdx].cards = newCards
+	a.board.rebuildColumnItemsAt(colIdx, targetIdx)
 
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
@@ -759,24 +780,48 @@ func (a App) handleMoveCardDown() (tea.Model, tea.Cmd) {
 
 	cards := a.board.columns[colIdx].cards
 	cardIdx := fullCardIndex(cards, card.ID)
-	if cardIdx < 0 {
-		return a, nil
-	}
-	if cardIdx >= len(cards)-1 {
+	if cardIdx < 0 || cardIdx >= len(cards)-1 {
 		return a, nil
 	}
 
-	// Calculate new position BEFORE the swap using the neighbors at the target index
+	// Find the target position: skip past hidden cards to the next visible card
+	targetIdx := cardIdx + 1
+	if a.board.HasFilter() {
+		for targetIdx < len(cards)-1 && !a.board.filter.MatchesCard(cards[targetIdx]) {
+			targetIdx++
+		}
+	}
+	if targetIdx == cardIdx {
+		return a, nil
+	}
+
+	// Insert AFTER the target, so targetIdx+1
+	insertAt := targetIdx + 1
+
+	// Calculate new position BEFORE the move
 	var newPos float64
-	if cardIdx+1 >= len(cards)-1 {
+	if insertAt >= len(cards) {
 		newPos = cards[len(cards)-1].Pos + 65536.0
 	} else {
-		newPos = (cards[cardIdx+1].Pos + cards[cardIdx+2].Pos) / 2.0
+		newPos = (cards[targetIdx].Pos + cards[insertAt].Pos) / 2.0
 	}
 
-	cards[cardIdx], cards[cardIdx+1] = cards[cardIdx+1], cards[cardIdx]
-	cards[cardIdx+1].Pos = newPos // Update local Pos so subsequent moves calculate correctly
-	a.board.rebuildColumnItemsAt(colIdx, cardIdx+1)
+	// Remove card from current position and insert after target
+	removed := cards[cardIdx]
+	copy(cards[cardIdx:], cards[cardIdx+1:])
+	a.board.columns[colIdx].cards = cards[:len(cards)-1]
+	cards = a.board.columns[colIdx].cards
+
+	// Adjust insertAt since we removed an element before it
+	insertAt--
+
+	newCards := make([]trello.Card, 0, len(cards)+1)
+	newCards = append(newCards, cards[:insertAt]...)
+	removed.Pos = newPos
+	newCards = append(newCards, removed)
+	newCards = append(newCards, cards[insertAt:]...)
+	a.board.columns[colIdx].cards = newCards
+	a.board.rebuildColumnItemsAt(colIdx, insertAt)
 
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
