@@ -1,6 +1,8 @@
 // Package trello provides types and a client for the Trello REST API.
 package trello
 
+import "time"
+
 // Board represents a Trello board with its lists.
 type Board struct {
 	ID           string
@@ -69,4 +71,26 @@ type CustomFieldValue struct {
 	FieldName string
 	Value     string
 	Color     string // set for list-type fields with a color
+}
+
+// Comment represents a comment on a Trello card.
+type Comment struct {
+	ID     string
+	Author Member
+	Body   string
+	Date   time.Time
+}
+
+// Checklist represents a checklist on a Trello card.
+type Checklist struct {
+	ID    string
+	Name  string
+	Items []CheckItem
+}
+
+// CheckItem represents a single item in a checklist.
+type CheckItem struct {
+	ID       string
+	Name     string
+	Complete bool
 }
