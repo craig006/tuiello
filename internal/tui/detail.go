@@ -239,6 +239,9 @@ func (d DetailModel) View() string {
 		if i == tabComments && d.card.CommentCount > 0 {
 			label = fmt.Sprintf("%s (%d)", name, d.card.CommentCount)
 		}
+		if i == tabChecklists && d.card.CheckItemCount > 0 {
+			label = fmt.Sprintf("%s (%d/%d)", name, d.card.CheckItemsChecked, d.card.CheckItemCount)
+		}
 		if i == d.tab {
 			tabBar += lipgloss.NewStyle().Bold(true).Foreground(borderColor).Render(" "+label+" ")
 		} else {
@@ -281,7 +284,11 @@ func (d DetailModel) renderOverview(width int) string {
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Render(d.card.Name)
 	sections = append(sections, title)
 
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
+
 	// Labels
+	labelsLabel := dimStyle.Render("Labels: ")
 	if len(d.card.Labels) > 0 {
 		var labels []string
 		for _, lbl := range d.card.Labels {
@@ -290,23 +297,24 @@ func (d DetailModel) renderOverview(width int) string {
 				ansiColor = 7
 			}
 			indicator := lipgloss.NewStyle().Foreground(ansiColor).Render("⏺")
-			name := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Render(" " + lbl.Name)
+			name := textStyle.Render(" " + lbl.Name)
 			labels = append(labels, indicator+name)
 		}
-		sections = append(sections, strings.Join(labels, "  "))
+		sections = append(sections, labelsLabel+strings.Join(labels, "  "))
+	} else {
+		sections = append(sections, labelsLabel+dimStyle.Render("-"))
 	}
 
-	// Assignees
-	assigneeLabel := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Assignees: ")
+	// Members
+	membersLabel := dimStyle.Render("Members: ")
 	if len(d.card.Members) > 0 {
 		var names []string
 		for _, m := range d.card.Members {
 			names = append(names, m.FullName)
 		}
-		assigneeText := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Render(strings.Join(names, ", "))
-		sections = append(sections, assigneeLabel+assigneeText)
+		sections = append(sections, membersLabel+textStyle.Render(strings.Join(names, ", ")))
 	} else {
-		sections = append(sections, assigneeLabel+lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("-"))
+		sections = append(sections, membersLabel+dimStyle.Render("-"))
 	}
 
 	// Description

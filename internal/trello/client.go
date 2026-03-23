@@ -115,7 +115,9 @@ type apiCard struct {
 }
 
 type apiBadges struct {
-	Comments int `json:"comments"`
+	Comments          int `json:"comments"`
+	CheckItems        int `json:"checkItems"`
+	CheckItemsChecked int `json:"checkItemsChecked"`
 }
 
 type apiLabel struct {
@@ -199,7 +201,9 @@ func (c *Client) FetchBoard(boardID string) (*Board, error) {
 			URL:          ac.URL,
 			MemberIDs:    ac.IDMembers,
 			ListID:       ac.IDList,
-			CommentCount: ac.Badges.Comments,
+			CommentCount:      ac.Badges.Comments,
+			CheckItemCount:    ac.Badges.CheckItems,
+			CheckItemsChecked: ac.Badges.CheckItemsChecked,
 		}
 		for _, lbl := range ac.Labels {
 			card.Labels = append(card.Labels, Label{ID: lbl.ID, Name: lbl.Name, Color: lbl.Color})

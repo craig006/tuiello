@@ -220,7 +220,6 @@ func (b BoardModel) View() string {
 		// Render content with border but we'll replace the top line
 		style := lipgloss.NewStyle().
 			Width(colWidth - 2).
-			Height(b.height - 4).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(borderColor)
 
@@ -251,6 +250,23 @@ func (b BoardModel) View() string {
 		}
 
 		views = append(views, rendered)
+	}
+
+	// Equalize column heights so all columns fill the available space
+	targetHeight := b.height
+	for i, v := range views {
+		lines := strings.Split(v, "\n")
+		if len(lines) < targetHeight {
+			// Measure the visible width of any content line for padding
+			padWidth := 0
+			if len(lines) > 1 {
+				padWidth = lipgloss.Width(lines[1])
+			}
+			for len(lines) < targetHeight {
+				lines = append(lines[:len(lines)-1], strings.Repeat(" ", padWidth), lines[len(lines)-1])
+			}
+			views[i] = strings.Join(lines, "\n")
+		}
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, views...)

@@ -31,9 +31,11 @@ type Card struct {
 	Labels       []Label
 	MemberIDs    []string
 	ListID       string
-	CommentCount int
-	Members      []Member
-	CustomFields []CustomFieldValue
+	CommentCount      int
+	CheckItemCount    int
+	CheckItemsChecked int
+	Members           []Member
+	CustomFields      []CustomFieldValue
 }
 
 // Label represents a Trello label.
