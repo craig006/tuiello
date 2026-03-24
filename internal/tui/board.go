@@ -48,7 +48,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 	if cfg.GUI.ColumnWidth > 0 && colWidth < cfg.GUI.ColumnWidth {
 		colWidth = cfg.GUI.ColumnWidth
 	}
-	colHeight := height - 11 // 4 for chrome + 3 for breadcrumb border + 3 for search bar + 1 for view bar
+	colHeight := height - 10 // 4 for chrome + 3 for breadcrumb border + 3 for search bar
 
 	columns := make([]Column, len(board.Lists))
 	for i, l := range board.Lists {
@@ -79,7 +79,7 @@ func (b *BoardModel) ResizeColumns() {
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
 	}
-	colHeight := b.height - 9 // 3 for search bar + 3 for breadcrumb border + 2 for column border + 1 for view bar
+	colHeight := b.height - 8 // 3 for search bar + 3 for breadcrumb border + 2 for column border
 	for i := range b.columns {
 		b.columns[i].SetSize(colWidth-2, colHeight)
 	}
@@ -300,9 +300,7 @@ func (b BoardModel) View() string {
 		breadcrumbParts = append(breadcrumbParts, style.Render(name))
 	}
 	separator := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" • ")
-	boardName := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Render(b.board.Name)
-	columnList := strings.Join(breadcrumbParts, separator)
-	breadcrumbText := boardName + "  " + columnList
+	breadcrumbText := strings.Join(breadcrumbParts, separator)
 	breadcrumb := lipgloss.NewStyle().
 		Width(b.width).
 		Border(lipgloss.RoundedBorder()).
@@ -318,7 +316,7 @@ func (b BoardModel) View() string {
 
 	headerLines := 3 // breadcrumb
 	if b.searchBar != "" {
-		headerLines = 7 // view bar (1) + search bar (3) + breadcrumb (3)
+		headerLines = 6 // search bar (3) + breadcrumb (3)
 	}
 	colH := b.height - headerLines
 

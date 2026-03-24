@@ -69,18 +69,20 @@ func (v *ViewBar) SelectByKey(key string) bool {
 // Keys returns the assigned shortcut keys.
 func (v *ViewBar) Keys() []string { return v.keys }
 
-// View renders the tab bar at the given width.
-func (v ViewBar) View(width int) string {
-	activeStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15))
-	activeKeyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(7))
+// View renders the tab bar at the given width with a board name prefix.
+func (v ViewBar) View(width int, boardName string) string {
+	activeStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
+	activeKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
 	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	boardNameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15))
 
 	// Calculate max title length for truncation
-	sepWidth := 5 // "  │  "
+	sepWidth := 3 // " • "
 	totalSepWidth := sepWidth * (len(v.views) - 1)
 	shortcutWidth := 4 // " ‹k›" per view
-	availableForTitles := width - 2 - totalSepWidth - (shortcutWidth * len(v.views)) // 2 for padding
+	boardNameLen := len([]rune(boardName)) + 2 // +2 for "  " spacing
+	availableForTitles := width - 4 - totalSepWidth - (shortcutWidth * len(v.views)) - boardNameLen // 4 for border
 	maxTitleLen := availableForTitles / len(v.views)
 	if maxTitleLen < 5 {
 		maxTitleLen = 5
@@ -103,13 +105,15 @@ func (v ViewBar) View(width int) string {
 		parts = append(parts, tab)
 	}
 
-	sep := sepStyle.Render("  │  ")
-	content := strings.Join(parts, sep)
+	sep := sepStyle.Render(" • ")
+	viewList := strings.Join(parts, sep)
+	content := boardNameStyle.Render(boardName) + "  " + viewList
 
 	bar := lipgloss.NewStyle().
 		Width(width).
-		Background(lipgloss.ANSIColor(0)).
-		Render(" " + content)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.ANSIColor(8)).
+		Render(content)
 
 	return bar
 }

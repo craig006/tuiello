@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/craig006/tuillo/internal/config"
 )
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestNewViewBarDefaultViews(t *testing.T) {
 	views := []config.ViewConfig{
@@ -88,12 +91,16 @@ func TestViewBarRender(t *testing.T) {
 		{Title: "All Cards"},
 	}
 	vb := NewViewBar(views)
-	rendered := vb.View(80)
-	if !strings.Contains(rendered, "My Cards") {
-		t.Error("expected 'My Cards' in rendered output")
+	rendered := vb.View(80, "Test Board")
+	plain := ansiRegex.ReplaceAllString(rendered, "")
+	if !strings.Contains(plain, "My Cards") {
+		t.Errorf("expected 'My Cards' in rendered output, got %q", plain)
 	}
-	if !strings.Contains(rendered, "All Cards") {
-		t.Error("expected 'All Cards' in rendered output")
+	if !strings.Contains(plain, "All Cards") {
+		t.Errorf("expected 'All Cards' in rendered output, got %q", plain)
+	}
+	if !strings.Contains(plain, "Test Board") {
+		t.Errorf("expected 'Test Board' in rendered output, got %q", plain)
 	}
 }
 

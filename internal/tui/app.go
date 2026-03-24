@@ -205,12 +205,13 @@ func (a *App) updateSearchWidth() {
 }
 
 func (a *App) updateDetailLayout() {
+	boardHeight := a.height - 3 // 3 for view bar (border top + content + border bottom)
 	boardWidth := a.width * 60 / 100
 	panelWidth := a.width - boardWidth - 1 // 1 char spacer between board and detail
 	a.board.width = boardWidth
-	a.board.height = a.height
+	a.board.height = boardHeight
 	a.board.ResizeColumns()
-	a.detail.SetSize(panelWidth, a.height)
+	a.detail.SetSize(panelWidth, boardHeight)
 	a.updateSearchWidth()
 }
 
@@ -243,11 +244,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 		if a.boardReady {
+			boardHeight := msg.Height - 3 // 3 for view bar (border top + content + border bottom)
 			if a.detail.open {
 				a.updateDetailLayout()
 			} else {
 				a.board.width = msg.Width
-				a.board.height = msg.Height
+				a.board.height = boardHeight
 				a.board.ResizeColumns()
 				a.updateSearchWidth()
 			}
@@ -257,7 +259,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case BoardFetchedMsg:
 		a.loading = false
 		a.boardReady = true
-		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height)
+		boardHeight := a.height - 3 // 3 for view bar (border top + content + border bottom)
+		a.board = NewBoardModel(msg.Board, a.config, a.width, boardHeight)
 		a.updateSearchWidth()
 		// Apply active view's filter
 		viewCfg := a.viewBar.ActiveConfig()
@@ -592,7 +595,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.updateDetailLayout()
 				} else {
 					a.board.width = a.width
-					a.board.height = a.height
+					a.board.height = a.height - 3
 					a.board.ResizeColumns()
 					a.updateSearchWidth()
 				}
@@ -1167,14 +1170,22 @@ func (a App) View() tea.View {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.ANSIColor(8)).
 			Render(searchContent)
-		viewBarContent := a.viewBar.View(a.board.width)
-		a.board.SetSearchBar(viewBarContent + "\n" + searchBar)
+		a.board.SetSearchBar(searchBar)
 
-		if a.detail.open {
-			content = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
-		} else {
-			content = a.board.View()
+		// Render view bar at full screen width, above everything
+		boardName := ""
+		if a.board.board != nil {
+			boardName = a.board.board.Name
 		}
+		viewBarContent := a.viewBar.View(a.width, boardName)
+
+		var boardContent string
+		if a.detail.open {
+			boardContent = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
+		} else {
+			boardContent = a.board.View()
+		}
+		content = viewBarContent + "\n" + boardContent
 
 		// Overlay member/label modal if open
 		if a.showMemberModal {
