@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseFilterTextOnly(t *testing.T) {
-	f := ParseFilter("fix door")
+	f := ParseFilter("fix door", "")
 	if f.Text != "fix door" {
 		t.Errorf("expected text 'fix door', got %q", f.Text)
 	}
@@ -21,7 +21,7 @@ func TestParseFilterTextOnly(t *testing.T) {
 }
 
 func TestParseFilterMemberToken(t *testing.T) {
-	f := ParseFilter("member:craig fix")
+	f := ParseFilter("member:craig fix", "")
 	if f.Text != "fix" {
 		t.Errorf("expected text 'fix', got %q", f.Text)
 	}
@@ -31,14 +31,14 @@ func TestParseFilterMemberToken(t *testing.T) {
 }
 
 func TestParseFilterLabelToken(t *testing.T) {
-	f := ParseFilter("label:Bug label:Design")
+	f := ParseFilter("label:Bug label:Design", "")
 	if len(f.Labels) != 2 {
 		t.Errorf("expected 2 labels, got %v", f.Labels)
 	}
 }
 
 func TestParseFilterQuotedValue(t *testing.T) {
-	f := ParseFilter(`member:"Craig Smith" fix`)
+	f := ParseFilter(`member:"Craig Smith" fix`, "")
 	if len(f.Members) != 1 || f.Members[0] != "Craig Smith" {
 		t.Errorf("expected members [Craig Smith], got %v", f.Members)
 	}
@@ -48,7 +48,7 @@ func TestParseFilterQuotedValue(t *testing.T) {
 }
 
 func TestParseFilterEmpty(t *testing.T) {
-	f := ParseFilter("")
+	f := ParseFilter("", "")
 	if !f.IsEmpty() {
 		t.Error("expected empty filter")
 	}
@@ -151,5 +151,22 @@ func TestBuildFilterTextQuotesSpaces(t *testing.T) {
 	result := BuildFilterText(f)
 	if !strings.Contains(result, `member:"Craig Smith"`) {
 		t.Errorf("expected quoted member in %q", result)
+	}
+}
+
+func TestParseFilterAtMe(t *testing.T) {
+	f := ParseFilter("member:@me fix", "craig")
+	if len(f.Members) != 1 || f.Members[0] != "craig" {
+		t.Errorf("expected @me resolved to 'craig', got %v", f.Members)
+	}
+	if f.Text != "fix" {
+		t.Errorf("expected text 'fix', got %q", f.Text)
+	}
+}
+
+func TestParseFilterAtMeEmpty(t *testing.T) {
+	f := ParseFilter("member:@me", "")
+	if len(f.Members) != 1 || f.Members[0] != "@me" {
+		t.Errorf("expected literal '@me' when no user, got %v", f.Members)
 	}
 }

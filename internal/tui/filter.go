@@ -21,7 +21,7 @@ func (f Filter) IsEmpty() bool {
 // ParseFilter parses a search string into structured filter components.
 // Recognized tokens: member:<value>, label:<value>. Quoted values supported.
 // Everything else becomes the text search.
-func ParseFilter(input string) Filter {
+func ParseFilter(input string, currentUser string) Filter {
 	var f Filter
 	var textParts []string
 
@@ -31,6 +31,9 @@ func ParseFilter(input string) Filter {
 		if strings.HasPrefix(lower, "member:") {
 			val := tok[len("member:"):]
 			val = strings.Trim(val, `"`)
+			if val == "@me" && currentUser != "" {
+				val = currentUser
+			}
 			if val != "" {
 				f.Members = append(f.Members, val)
 			}

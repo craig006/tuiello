@@ -237,7 +237,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.updateSearchWidth()
 		// Re-apply current filter if any
 		if a.searchInput.Value() != "" {
-			f := ParseFilter(a.searchInput.Value())
+			f := ParseFilter(a.searchInput.Value(), "")
 			a.board.ApplyFilter(f)
 		}
 		a.status = fmt.Sprintf("%s — %s", msg.Board.Name, a.board.PositionIndicator())
@@ -398,7 +398,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter", "esc":
 				// Close modal and update search bar with selections
 				selected := modal.Selected()
-				currentFilter := ParseFilter(a.searchInput.Value())
+				currentFilter := ParseFilter(a.searchInput.Value(), "")
 				if isLabel {
 					currentFilter.Labels = selected
 				} else {
@@ -432,7 +432,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var cmd tea.Cmd
 				a.searchInput, cmd = a.searchInput.Update(msg)
 				// Live filtering on every keystroke
-				f := ParseFilter(a.searchInput.Value())
+				f := ParseFilter(a.searchInput.Value(), "")
 				a.board.ApplyFilter(f)
 				fetchCmd := a.syncDetailAfterFilter()
 				if fetchCmd != nil {
@@ -583,7 +583,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.FilterMembers):
 			if a.boardReady && !a.showPalette && !a.searchFocused {
-				currentFilter := ParseFilter(a.searchInput.Value())
+				currentFilter := ParseFilter(a.searchInput.Value(), "")
 				var items []MultiSelectItem
 				for _, m := range a.board.board.Members {
 					checked := false
@@ -606,7 +606,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.FilterLabels):
 			if a.boardReady && !a.showPalette && !a.searchFocused {
-				currentFilter := ParseFilter(a.searchInput.Value())
+				currentFilter := ParseFilter(a.searchInput.Value(), "")
 				// Collect unique labels from all cards across all columns
 				seen := make(map[string]bool)
 				var items []MultiSelectItem
@@ -967,7 +967,7 @@ func (a *App) syncDetailAfterFilter() tea.Cmd {
 }
 
 func (a App) renderFilterDisplay() string {
-	f := ParseFilter(a.searchInput.Value())
+	f := ParseFilter(a.searchInput.Value(), "")
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4))
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
