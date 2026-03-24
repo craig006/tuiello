@@ -44,23 +44,30 @@ var rootCmd = &cobra.Command{
 			appConfig.Board.Name = boardFlag
 		}
 
+		// Env vars override config auth
+		if envKey := os.Getenv("TRELLO_API_KEY"); envKey != "" {
+			appConfig.Auth.APIKey = envKey
+		}
+		if envToken := os.Getenv("TRELLO_TOKEN"); envToken != "" {
+			appConfig.Auth.Token = envToken
+		}
+
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		apiKey := os.Getenv("TRELLO_API_KEY")
-		token := os.Getenv("TRELLO_TOKEN")
-
-		if apiKey == "" || token == "" {
+		if appConfig.Auth.APIKey == "" || appConfig.Auth.Token == "" {
 			return fmt.Errorf("missing Trello credentials.\n\n" +
-				"Set these environment variables:\n" +
+				"Set credentials in ~/.config/tuiello/auth.yml:\n" +
+				"  auth:\n" +
+				"    apiKey: <your-api-key>\n" +
+				"    token: <your-token>\n\n" +
+				"Or set environment variables:\n" +
 				"  export TRELLO_API_KEY=<your-api-key>\n" +
 				"  export TRELLO_TOKEN=<your-token>\n\n" +
-				"Get your API key at: https://trello.com/power-ups/admin\n" +
-				"Then authorize a token at:\n" +
-				"  https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=<YOUR_KEY>")
+				"Get your API key at: https://trello.com/power-ups/admin")
 		}
 
-		client := trello.NewClient(apiKey, token)
+		client := trello.NewClient(appConfig.Auth.APIKey, appConfig.Auth.Token)
 
 		if err := client.ValidateCredentials(); err != nil {
 			return fmt.Errorf("invalid credentials: %w", err)
