@@ -82,7 +82,7 @@ func (b *BoardModel) ResizeColumns() {
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
 	}
-	colHeight := b.height - 5 // 3 for breadcrumb + 2 for column border
+	colHeight := b.height - 2 // 2 for column border
 	for i := range b.columns {
 		b.columns[i].SetSize(colWidth-2, colHeight)
 	}
@@ -273,6 +273,36 @@ func (b BoardModel) Update(msg tea.Msg) (BoardModel, tea.Cmd) {
 	return b, cmd
 }
 
+// RenderBreadcrumb renders the nav breadcrumb bar at the given width.
+func (b BoardModel) RenderBreadcrumb(width int) string {
+	if len(b.columns) == 0 {
+		return ""
+	}
+	start, end := b.VisibleRange()
+
+	var breadcrumbParts []string
+	for i, col := range b.columns {
+		name := col.name
+		var style lipgloss.Style
+		if i == b.focused {
+			style = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
+		} else if i >= start && i < end {
+			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
+		} else {
+			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+		}
+		breadcrumbParts = append(breadcrumbParts, style.Render(name))
+	}
+	separator := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" • ")
+	breadcrumbText := strings.Join(breadcrumbParts, separator)
+	return lipgloss.NewStyle().
+		Width(width).
+		Height(1).
+		Padding(1, 0).
+		Align(lipgloss.Center).
+		Render(breadcrumbText)
+}
+
 func (b BoardModel) View() string {
 	if len(b.columns) == 0 {
 		return "No lists on this board."
@@ -280,34 +310,7 @@ func (b BoardModel) View() string {
 
 	start, end := b.VisibleRange()
 
-	// Build breadcrumb bar showing all column names
-	var breadcrumbParts []string
-	for i, col := range b.columns {
-		name := col.name
-		var style lipgloss.Style
-		if i == b.focused {
-			// Selected column: blue, bold, underlined
-			style = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
-		} else if i >= start && i < end {
-			// Other visible columns: white
-			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
-		} else {
-			// Off-screen columns: grey
-			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-		}
-		breadcrumbParts = append(breadcrumbParts, style.Render(name))
-	}
-	separator := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" • ")
-	breadcrumbText := strings.Join(breadcrumbParts, separator)
-	breadcrumb := lipgloss.NewStyle().
-		Width(b.width).
-		Height(1).
-		Padding(1, 0).
-		Align(lipgloss.Center).
-		Render(breadcrumbText)
-
-	footerLines := 3 // breadcrumb
-	colH := b.height - footerLines
+	colH := b.height
 
 	visibleCount := end - start
 	colWidth := b.width / visibleCount
@@ -370,6 +373,22 @@ func (b BoardModel) View() string {
 				titleStyle.Render(title) +
 				borderStyle.Render(strings.Repeat(border.Top, trailingDashes)+border.TopRight)
 
+			// Embed page indicator in bottom border (right-aligned) if there are multiple pages
+			pageInfo := col.PageInfo()
+			if pageInfo != "" && len(lines) >= 2 {
+				lastIdx := len(lines) - 1
+				bottomWidth := lipgloss.Width(lines[lastIdx])
+				pageLen := len([]rune(pageInfo))
+				leadingBottom := bottomWidth - 2 - 1 - pageLen // 2 corners, 1 trailing dash
+				if leadingBottom < 0 {
+					leadingBottom = 0
+				}
+				pageStyle := lipgloss.NewStyle().Foreground(borderColor)
+				lines[lastIdx] = borderStyle.Render(border.BottomLeft+strings.Repeat(border.Bottom, leadingBottom)) +
+					pageStyle.Render(pageInfo) +
+					borderStyle.Render(border.Bottom+border.BottomRight)
+			}
+
 			rendered = strings.Join(lines, "\n")
 		}
 
@@ -377,5 +396,5 @@ func (b BoardModel) View() string {
 	}
 
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, views...)
-	return columns + "\n" + breadcrumb
+	return columns
 }

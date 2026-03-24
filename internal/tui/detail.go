@@ -7,6 +7,8 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
+	"charm.land/glamour/v2/styles"
 
 	"github.com/craig006/tuiello/internal/trello"
 )
@@ -285,8 +287,11 @@ func (d DetailModel) renderOverview(width int) string {
 	var sections []string
 
 	// Title
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Render(d.card.Name)
+	wrappedName := wordWrap(d.card.Name, width)
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Render(wrappedName)
+	sections = append(sections, "")
 	sections = append(sections, title)
+	sections = append(sections, "")
 
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
@@ -325,11 +330,20 @@ func (d DetailModel) renderOverview(width int) string {
 		sections = append(sections, membersLabel+dimStyle.Render("-"))
 	}
 
+	// Custom Fields
+	if len(d.card.CustomFields) > 0 {
+		for _, cf := range d.card.CustomFields {
+			fieldLine := dimStyle.Render(cf.FieldName+": ") + textStyle.Render(cf.Value)
+			sections = append(sections, fieldLine)
+		}
+	}
+
 	// Description
-	sections = append(sections, "") // spacer
+	sections = append(sections, "") // spacer above line
+	sections = append(sections, dimStyle.Render(strings.Repeat("─", width)))
+	sections = append(sections, "") // spacer below line
 	if d.card.Description != "" {
-		desc := wordWrap(d.card.Description, width)
-		sections = append(sections, lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Render(desc))
+		sections = append(sections, renderMarkdown(d.card.Description, width))
 	} else {
 		sections = append(sections, lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("No description."))
 	}
@@ -348,7 +362,6 @@ func (d DetailModel) renderComments(width int) string {
 	var sections []string
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	boldStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15))
-	bodyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
 
 	for i, c := range d.comments {
 		if i > 0 {
@@ -356,8 +369,8 @@ func (d DetailModel) renderComments(width int) string {
 		}
 		dateStr := c.Date.Format("2006-01-02")
 		header := boldStyle.Render(c.Author.FullName) + " " + dimStyle.Render("("+dateStr+")")
-		body := wordWrap(c.Body, width)
-		sections = append(sections, header+"\n"+bodyStyle.Render(body))
+		body := renderMarkdown(c.Body, width)
+		sections = append(sections, header+"\n"+body)
 	}
 
 	return strings.Join(sections, "\n")
@@ -427,4 +440,23 @@ func wordWrap(text string, width int) string {
 		}
 	}
 	return result.String()
+}
+
+// renderMarkdown renders text as markdown via glamour, falling back to plain word-wrapped text.
+func renderMarkdown(text string, width int) string {
+	style := styles.DarkStyleConfig
+	noMargin := uint(0)
+	style.Document.Margin = &noMargin
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStyles(style),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Render(wordWrap(text, width))
+	}
+	rendered, err := r.Render(text)
+	if err != nil {
+		return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Render(wordWrap(text, width))
+	}
+	return strings.TrimSpace(rendered)
 }

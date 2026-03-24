@@ -193,10 +193,12 @@ func (d cardDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	}
 	bottomRow := labels + styledSpan(0, strings.Repeat(" ", gap)) + memberSlot + commentSlot
 
-	// Build content lines
+	// Build content lines — always 3 lines: title, custom fields (or blank), labels/meta
 	content := title
 	if cfLine != "" {
 		content += "\n" + cfLine
+	} else {
+		content += "\n"
 	}
 	content += "\n" + bottomRow
 
@@ -242,6 +244,7 @@ func NewColumn(l trello.List, width, height int, focused bool) Column {
 	m.SetShowTitle(false)
 	m.SetShowStatusBar(false)
 	m.SetShowHelp(false)
+	m.SetShowPagination(false)
 	m.SetFilteringEnabled(false)
 	return Column{list: m, delegate: delegate, listID: l.ID, name: l.Name, cards: l.Cards}
 }
@@ -272,6 +275,15 @@ func (c Column) SelectedCard() (trello.Card, bool) {
 }
 
 func (c Column) Cards() []trello.Card { return c.cards }
+
+// PageInfo returns "Page N/M" if there are multiple pages, or "" if not.
+func (c Column) PageInfo() string {
+	p := c.list.Paginator
+	if p.TotalPages <= 1 {
+		return ""
+	}
+	return fmt.Sprintf(" Page %d/%d ", p.Page+1, p.TotalPages)
+}
 
 func (c *Column) SetSize(width, height int) { c.list.SetSize(width, height) }
 func (c *Column) Select(index int)          { c.list.Select(index) }

@@ -215,13 +215,13 @@ func (a *App) updateSearchWidth() {
 }
 
 func (a *App) updateDetailLayout() {
-	boardHeight := a.height - 7 // 3 for view bar + 3 for search bar + 1 margin
+	boardHeight := a.height - 10 // 3 for view bar + 3 for search bar + 1 margin + 3 for breadcrumb
 	boardWidth := a.width * 60 / 100
 	panelWidth := a.width - boardWidth - 1 // 1 char spacer between board and detail
 	a.board.width = boardWidth
 	a.board.height = boardHeight
 	a.board.ResizeColumns()
-	a.detail.SetSize(panelWidth, boardHeight-3) // -3 for breadcrumb so detail aligns with column bottoms
+	a.detail.SetSize(panelWidth, boardHeight)
 	a.updateSearchWidth()
 }
 
@@ -254,7 +254,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 		if a.boardReady {
-			boardHeight := msg.Height - 3 // 3 for view bar (border top + content + border bottom)
+			boardHeight := msg.Height - 6 // 3 for view bar + 3 for breadcrumb
 			if a.detail.open {
 				a.updateDetailLayout()
 			} else {
@@ -585,6 +585,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case matchKey(msg, a.keyMap.MoveCardDown):
 			return a.handleMoveCardDown()
 
+		case msg.String() == "ctrl+g":
+			return a.handleMoveCardToTop()
+
+		case msg.String() == "ctrl+shift+g":
+			return a.handleMoveCardToBottom()
+
 		case matchKey(msg, a.keyMap.DetailToggle):
 			if a.boardReady {
 				if !a.detail.open && a.width < 80 {
@@ -605,7 +611,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.updateDetailLayout()
 				} else {
 					a.board.width = a.width
-					a.board.height = a.height - 7
+					a.board.height = a.height - 10
 					a.board.ResizeColumns()
 					a.updateSearchWidth()
 				}
@@ -951,6 +957,72 @@ func (a App) handleMoveCardDown() (tea.Model, tea.Cmd) {
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
 
+func (a App) handleMoveCardToTop() (tea.Model, tea.Cmd) {
+	if !a.boardReady {
+		return a, nil
+	}
+
+	card, colIdx, ok := a.board.SelectedCard()
+	if !ok {
+		return a, nil
+	}
+
+	cards := a.board.columns[colIdx].cards
+	cardIdx := fullCardIndex(cards, card.ID)
+	if cardIdx <= 0 {
+		return a, nil
+	}
+
+	newPos := cards[0].Pos / 2.0
+
+	removed := cards[cardIdx]
+	copy(cards[cardIdx:], cards[cardIdx+1:])
+	a.board.columns[colIdx].cards = cards[:len(cards)-1]
+	cards = a.board.columns[colIdx].cards
+
+	newCards := make([]trello.Card, 0, len(cards)+1)
+	removed.Pos = newPos
+	newCards = append(newCards, removed)
+	newCards = append(newCards, cards...)
+	a.board.columns[colIdx].cards = newCards
+	a.board.rebuildColumnItemsAt(colIdx, 0)
+
+	return a, a.reorderCardCmd(card.ID, newPos)
+}
+
+func (a App) handleMoveCardToBottom() (tea.Model, tea.Cmd) {
+	if !a.boardReady {
+		return a, nil
+	}
+
+	card, colIdx, ok := a.board.SelectedCard()
+	if !ok {
+		return a, nil
+	}
+
+	cards := a.board.columns[colIdx].cards
+	cardIdx := fullCardIndex(cards, card.ID)
+	if cardIdx < 0 || cardIdx >= len(cards)-1 {
+		return a, nil
+	}
+
+	newPos := cards[len(cards)-1].Pos + 65536.0
+
+	removed := cards[cardIdx]
+	copy(cards[cardIdx:], cards[cardIdx+1:])
+	a.board.columns[colIdx].cards = cards[:len(cards)-1]
+	cards = a.board.columns[colIdx].cards
+
+	newCards := make([]trello.Card, 0, len(cards)+1)
+	newCards = append(newCards, cards...)
+	removed.Pos = newPos
+	newCards = append(newCards, removed)
+	a.board.columns[colIdx].cards = newCards
+	a.board.rebuildColumnItemsAt(colIdx, len(newCards)-1)
+
+	return a, a.reorderCardCmd(card.ID, newPos)
+}
+
 func (a App) executeCustomCommand(cmd config.CustomCommandConfig) (tea.Model, tea.Cmd) {
 	card, colIdx, ok := a.board.SelectedCard()
 	if !ok {
@@ -1106,7 +1178,7 @@ func (a *App) applyActiveView() tea.Cmd {
 			a.detail.open = false
 			a.detail.cardID = ""
 			a.board.width = a.width
-			a.board.height = a.height
+			a.board.height = a.height - 6 // 3 for view bar + 3 for breadcrumb
 			a.board.ResizeColumns()
 			a.updateSearchWidth()
 		}
@@ -1217,7 +1289,8 @@ func (a App) View() tea.View {
 		} else {
 			boardContent = a.board.View()
 		}
-		content = viewBarContent + "\n" + searchBarContent + "\n" + boardContent
+		breadcrumbContent := a.board.RenderBreadcrumb(a.width)
+		content = viewBarContent + "\n" + searchBarContent + "\n" + boardContent + breadcrumbContent
 
 		// Overlay member/label modal if open
 		if a.showMemberModal {
