@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	Auth           AuthConfig            `mapstructure:"auth"`
 	GUI            GUIConfig             `mapstructure:"gui"`
 	Board          BoardConfig           `mapstructure:"board"`
 	Keybinding     KeybindingConfig      `mapstructure:"keybinding"`
@@ -35,6 +36,11 @@ type ThemeConfig struct {
 type BoardConfig struct {
 	ID   string `mapstructure:"id"`
 	Name string `mapstructure:"name"`
+}
+
+type AuthConfig struct {
+	APIKey string `mapstructure:"apiKey"`
+	Token  string `mapstructure:"token"`
 }
 
 type KeybindingConfig struct {
@@ -195,7 +201,8 @@ func AssignViewKeys(views []ViewConfig) []string {
 	return keys
 }
 
-// Load reads config with cascade: globalDir/config.yml → projectDir/.tuiello.yml.
+// Load reads config with cascade: globalDir/config.yml → globalDir/auth.yml →
+// projectDir/.tuiello/config.yml → projectDir/.tuiello/auth.yml.
 // Either path can be empty to skip that layer.
 func Load(globalDir, projectDir string) (Config, error) {
 	cfg := DefaultConfig()
@@ -203,24 +210,27 @@ func Load(globalDir, projectDir string) (Config, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	// Load global config
+	var files []string
 	if globalDir != "" {
-		v.SetConfigName("config")
-		v.AddConfigPath(globalDir)
-		if err := v.MergeInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				return cfg, err
-			}
-		}
+		files = append(files,
+			filepath.Join(globalDir, "config.yml"),
+			filepath.Join(globalDir, "auth.yml"),
+		)
+	}
+	if projectDir != "" {
+		files = append(files,
+			filepath.Join(projectDir, ".tuiello", "config.yml"),
+			filepath.Join(projectDir, ".tuiello", "auth.yml"),
+		)
 	}
 
-	// Load project-local config
-	if projectDir != "" {
-		v.SetConfigFile(filepath.Join(projectDir, ".tuiello.yml"))
+	for _, f := range files {
+		v.SetConfigFile(f)
 		if err := v.MergeInConfig(); err != nil {
-			// SetConfigFile returns os path errors (not ConfigFileNotFoundError) when file is absent
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok && !os.IsNotExist(err) {
-				return cfg, err
+			if !os.IsNotExist(err) {
+				if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+					return cfg, err
+				}
 			}
 		}
 	}

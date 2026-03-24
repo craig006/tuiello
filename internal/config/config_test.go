@@ -57,7 +57,6 @@ func TestCascadeProjectLocal(t *testing.T) {
 	globalDir := t.TempDir()
 	projectDir := t.TempDir()
 
-	// global config sets board id
 	os.WriteFile(filepath.Join(globalDir, "config.yml"), []byte(`
 board:
   id: "global-board"
@@ -65,8 +64,9 @@ gui:
   columnWidth: 25
 `), 0644)
 
-	// project-local overrides board id
-	os.WriteFile(filepath.Join(projectDir, ".tuiello.yml"), []byte(`
+	projectCfgDir := filepath.Join(projectDir, ".tuiello")
+	os.MkdirAll(projectCfgDir, 0755)
+	os.WriteFile(filepath.Join(projectCfgDir, "config.yml"), []byte(`
 board:
   id: "project-board"
 `), 0644)
@@ -78,9 +78,93 @@ board:
 	if cfg.Board.ID != "project-board" {
 		t.Errorf("expected project-board, got %q", cfg.Board.ID)
 	}
-	// global columnWidth preserved since project didn't override
 	if cfg.GUI.ColumnWidth != 25 {
 		t.Errorf("expected columnWidth 25, got %d", cfg.GUI.ColumnWidth)
+	}
+}
+
+func TestAuthFromFile(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "auth.yml"), []byte(`
+auth:
+  apiKey: "test-key"
+  token: "test-token"
+`), 0644)
+
+	cfg, err := Load(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Auth.APIKey != "test-key" {
+		t.Errorf("expected apiKey 'test-key', got %q", cfg.Auth.APIKey)
+	}
+	if cfg.Auth.Token != "test-token" {
+		t.Errorf("expected token 'test-token', got %q", cfg.Auth.Token)
+	}
+}
+
+func TestFourFileMergeOrder(t *testing.T) {
+	globalDir := t.TempDir()
+	projectDir := t.TempDir()
+
+	os.WriteFile(filepath.Join(globalDir, "config.yml"), []byte(`
+board:
+  id: "global-board"
+gui:
+  columnWidth: 25
+`), 0644)
+
+	os.WriteFile(filepath.Join(globalDir, "auth.yml"), []byte(`
+auth:
+  apiKey: "global-key"
+  token: "global-token"
+`), 0644)
+
+	projectCfgDir := filepath.Join(projectDir, ".tuiello")
+	os.MkdirAll(projectCfgDir, 0755)
+
+	os.WriteFile(filepath.Join(projectCfgDir, "config.yml"), []byte(`
+board:
+  id: "project-board"
+`), 0644)
+
+	os.WriteFile(filepath.Join(projectCfgDir, "auth.yml"), []byte(`
+auth:
+  token: "project-token"
+`), 0644)
+
+	cfg, err := Load(globalDir, projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Board.ID != "project-board" {
+		t.Errorf("expected project-board, got %q", cfg.Board.ID)
+	}
+	if cfg.GUI.ColumnWidth != 25 {
+		t.Errorf("expected columnWidth 25, got %d", cfg.GUI.ColumnWidth)
+	}
+	if cfg.Auth.APIKey != "global-key" {
+		t.Errorf("expected global-key, got %q", cfg.Auth.APIKey)
+	}
+	if cfg.Auth.Token != "project-token" {
+		t.Errorf("expected project-token, got %q", cfg.Auth.Token)
+	}
+}
+
+func TestMissingFilesSkipped(t *testing.T) {
+	globalDir := t.TempDir()
+	projectDir := t.TempDir()
+
+	cfg, err := Load(globalDir, projectDir)
+	if err != nil {
+		t.Fatalf("expected no error with missing files, got %v", err)
+	}
+	if cfg.GUI.ColumnWidth != 30 {
+		t.Errorf("expected default columnWidth 30, got %d", cfg.GUI.ColumnWidth)
+	}
+	if cfg.Auth.APIKey != "" {
+		t.Errorf("expected empty apiKey, got %q", cfg.Auth.APIKey)
 	}
 }
 
