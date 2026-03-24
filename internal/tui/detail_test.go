@@ -12,7 +12,7 @@ func newTestDetail() DetailModel {
 	cfg := config.DefaultConfig()
 	km := NewKeyMap(cfg.Keybinding)
 	theme := NewTheme(cfg.GUI.Theme)
-	return NewDetailModel(km, theme)
+	return NewDetailModel(km, theme, cfg.GUI.Padding)
 }
 
 func TestDetailToggle(t *testing.T) {

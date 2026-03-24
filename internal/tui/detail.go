@@ -62,15 +62,17 @@ type DetailModel struct {
 	viewport viewport.Model
 	width    int
 	height   int
+	padding  int
 	keyMap   KeyMap
 	theme    Theme
 }
 
-func NewDetailModel(km KeyMap, theme Theme) DetailModel {
+func NewDetailModel(km KeyMap, theme Theme, padding int) DetailModel {
 	vp := viewport.New()
 	return DetailModel{
 		keyMap:   km,
 		theme:    theme,
+		padding:  padding,
 		viewport: vp,
 	}
 }
@@ -110,7 +112,7 @@ func (d *DetailModel) SetSize(width, height int) {
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
-	vpWidth := width - 4 // border + padding
+	vpWidth := width - 4 - d.padding // border + padding + content padding
 	if vpWidth < 1 {
 		vpWidth = 1
 	}
@@ -198,7 +200,7 @@ func (d DetailModel) View() string {
 		return ""
 	}
 
-	contentWidth := d.width - 4 // border + padding
+	contentWidth := d.width - 4 - d.padding // border + padding + content padding
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
@@ -229,7 +231,8 @@ func (d DetailModel) View() string {
 	d.viewport.SetContent(content)
 
 	// Build border with tab bar
-	borderColor := d.theme.ActiveBorder.GetForeground()
+	borderColor := d.theme.InactiveBorder.GetForeground()
+	tabActiveColor := d.theme.ActiveBorder.GetForeground()
 	border := lipgloss.RoundedBorder()
 
 	// Build tab bar string with dynamic labels
@@ -243,7 +246,7 @@ func (d DetailModel) View() string {
 			label = fmt.Sprintf("%s (%d/%d)", name, d.card.CheckItemsChecked, d.card.CheckItemCount)
 		}
 		if i == d.tab {
-			tabBar += lipgloss.NewStyle().Bold(true).Foreground(borderColor).Render(" "+label+" ")
+			tabBar += lipgloss.NewStyle().Bold(true).Foreground(tabActiveColor).Render(" "+label+" ")
 		} else {
 			tabBar += lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render(" "+label+" ")
 		}
@@ -252,6 +255,7 @@ func (d DetailModel) View() string {
 	// Render panel with border
 	style := lipgloss.NewStyle().
 		Width(d.width).
+		PaddingLeft(d.padding).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
 		Height(d.height)
@@ -297,7 +301,11 @@ func (d DetailModel) renderOverview(width int) string {
 				ansiColor = 7
 			}
 			indicator := lipgloss.NewStyle().Foreground(ansiColor).Render("⏺")
-			name := textStyle.Render(" " + lbl.Name)
+			displayName := lbl.Name
+			if displayName == "" {
+				displayName = "-"
+			}
+			name := textStyle.Render(" " + displayName)
 			labels = append(labels, indicator+name)
 		}
 		sections = append(sections, labelsLabel+strings.Join(labels, "  "))

@@ -73,16 +73,17 @@ func (v *ViewBar) SelectByKey(key string) bool {
 func (v *ViewBar) Keys() []string { return v.keys }
 
 // View renders the tab bar at the given width with a board name prefix and app branding.
-func (v ViewBar) View(width int, boardName string) string {
-	activeStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
-	activeKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15))
-	dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	appNameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(4))
-	appVerStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+func (v ViewBar) View(width int, boardName string, padding int) string {
+	bg := lipgloss.Color("236")
+	activeStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4)).Background(bg)
+	activeKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Background(bg)
+	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
+	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
+	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Background(bg)
+	dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
+	appNameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(4)).Background(bg)
+	appVerStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
 
 	// Build the left side: " Board: <name> | Views: <tabs> "
 	boardSection := labelStyle.Render("Board: ") + valueStyle.Render(boardName)
@@ -108,23 +109,25 @@ func (v ViewBar) View(width int, boardName string) string {
 	leftContent := boardSection + divider + viewsSection
 
 	// Build the right side: app name + version
-	appBrand := appNameStyle.Render("tuillo") + " " + appVerStyle.Render(Version)
+	appBrand := appNameStyle.Render("tuillo") + appVerStyle.Render(" "+Version)
 
-	// Calculate padding between left and right
+	// Calculate gap between left and right
+	bgSpace := lipgloss.NewStyle().Background(bg)
 	leftWidth := lipgloss.Width(leftContent)
 	rightWidth := lipgloss.Width(appBrand)
-	innerWidth := width - 2 // 2 for border sides
-	padding := innerWidth - leftWidth - rightWidth - 2 // 2 for outer spacing
-	if padding < 1 {
-		padding = 1
+	rightPad := 1 // space after version number
+	innerWidth := width - padding - rightPad
+	gap := innerWidth - leftWidth - rightWidth
+	if gap < 1 {
+		gap = 1
 	}
 
-	content := leftContent + strings.Repeat(" ", padding) + appBrand
+	content := leftContent + bgSpace.Render(strings.Repeat(" ", gap)) + appBrand
 
 	bar := lipgloss.NewStyle().
 		Width(width).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.ANSIColor(8)).
+		Padding(1, rightPad, 1, padding). // top 1, right 1, bottom 1, left padding
+		Background(bg).
 		Render(content)
 
 	return bar

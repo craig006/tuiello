@@ -78,10 +78,12 @@ func (d cardDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	}
 
 	isSelected := index == m.Index() && d.focused
-	cardWidth := m.Width() - 2 // leave room for column padding
-	innerWidth := cardWidth - 2 // account for padding
+	cardWidth := m.Width()
+	// Selected: border left (1) + padding right (1) = 2 chars of chrome
+	// Unselected: padding left (1) + padding right (1) = 2 chars of chrome
+	innerWidth := cardWidth - 2
 
-	selBg := lipgloss.ANSIColor(4)
+	selBg := lipgloss.Color("236") // subtle dark grey highlight
 	styledSpan := func(fg lipgloss.ANSIColor, text string) string {
 		s := lipgloss.NewStyle().Foreground(fg)
 		if isSelected {
@@ -198,22 +200,27 @@ func (d cardDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 	}
 	content += "\n" + bottomRow
 
-	var style lipgloss.Style
 	if isSelected {
-		style = lipgloss.NewStyle().
+		// Blue left bar + subtle highlight background (like gh-dash style)
+		selBorder := lipgloss.Border{Left: "▎"}
+		style := lipgloss.NewStyle().
 			Background(selBg).
 			Foreground(lipgloss.ANSIColor(15)).
 			Bold(true).
 			Width(cardWidth).
-			Padding(0, 1)
+			BorderLeft(true).
+			BorderStyle(selBorder).
+			BorderForeground(lipgloss.ANSIColor(4)).
+			BorderBackground(selBg).
+			PaddingRight(1)
+		fmt.Fprint(w, style.Render(content))
 	} else {
-		style = lipgloss.NewStyle().
+		style := lipgloss.NewStyle().
 			Foreground(lipgloss.ANSIColor(7)).
 			Width(cardWidth).
 			Padding(0, 1)
+		fmt.Fprint(w, style.Render(content))
 	}
-
-	fmt.Fprint(w, style.Render(content))
 }
 
 // Column wraps a bubbles/list.Model for a single Trello list.

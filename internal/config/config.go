@@ -22,6 +22,7 @@ type GUIConfig struct {
 	ColumnWidth      int         `mapstructure:"columnWidth"`
 	ShowCardLabels   bool        `mapstructure:"showCardLabels"`
 	ShowDetailPanel  bool        `mapstructure:"showDetailPanel"`
+	Padding          int         `mapstructure:"padding"`
 }
 
 type ThemeConfig struct {
@@ -124,6 +125,7 @@ func DefaultConfig() Config {
 			ColumnWidth:     30,
 			ShowCardLabels:  true,
 			ShowDetailPanel: true,
+			Padding:         1,
 		},
 		Keybinding: KeybindingConfig{
 			Universal: UniversalKeys{

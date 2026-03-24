@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -117,12 +118,21 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		status:         "Loading board...",
 		loading:        true,
 		commandPalette: palette,
-		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme)),
+		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme), cfg.GUI.Padding),
 	}
 	a.viewBar = NewViewBar(cfg.Views)
 	si := textinput.New()
 	si.Placeholder = "Search... (/ to focus, ctrl+m members, ctrl+l labels, esc clear)"
-	si.Prompt = "\uf002 "
+	si.Prompt = "\uf002  "
+	searchBg := lipgloss.Color("238")
+	styles := si.Styles()
+	styles.Focused.Prompt = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4)).Background(searchBg)
+	styles.Focused.Text = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(15)).Background(searchBg)
+	styles.Focused.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(searchBg)
+	styles.Blurred.Prompt = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(searchBg)
+	styles.Blurred.Text = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Background(searchBg)
+	styles.Blurred.Placeholder = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(searchBg)
+	si.SetStyles(styles)
 	si.SetWidth(0) // will be set on first render
 	a.searchInput = si
 	return a
@@ -200,18 +210,18 @@ func (a App) reorderCardCmd(cardID string, pos float64) tea.Cmd {
 }
 
 func (a *App) updateSearchWidth() {
-	// border (2) + prompt icon+space (2) = 4 chars of chrome
-	a.searchInput.SetWidth(a.board.width - 4)
+	// padding + focus bar (1) + prompt icon+spaces (3) = ~5 chars of chrome
+	a.searchInput.SetWidth(a.width - a.config.GUI.Padding - 5)
 }
 
 func (a *App) updateDetailLayout() {
-	boardHeight := a.height - 3 // 3 for view bar (border top + content + border bottom)
+	boardHeight := a.height - 7 // 3 for view bar + 3 for search bar + 1 margin
 	boardWidth := a.width * 60 / 100
 	panelWidth := a.width - boardWidth - 1 // 1 char spacer between board and detail
 	a.board.width = boardWidth
 	a.board.height = boardHeight
 	a.board.ResizeColumns()
-	a.detail.SetSize(panelWidth, boardHeight)
+	a.detail.SetSize(panelWidth, boardHeight-3) // -3 for breadcrumb so detail aligns with column bottoms
 	a.updateSearchWidth()
 }
 
@@ -259,7 +269,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case BoardFetchedMsg:
 		a.loading = false
 		a.boardReady = true
-		boardHeight := a.height - 3 // 3 for view bar (border top + content + border bottom)
+		boardHeight := a.height - 7 // 3 for view bar + 3 for search bar + 1 margin
 		a.board = NewBoardModel(msg.Board, a.config, a.width, boardHeight)
 		a.updateSearchWidth()
 		// Apply active view's filter
@@ -595,7 +605,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.updateDetailLayout()
 				} else {
 					a.board.width = a.width
-					a.board.height = a.height - 3
+					a.board.height = a.height - 7
 					a.board.ResizeColumns()
 					a.updateSearchWidth()
 				}
@@ -1105,33 +1115,53 @@ func (a *App) applyActiveView() tea.Cmd {
 	return a.syncDetailAfterFilter()
 }
 
+func (a App) renderSearchBar(searchContent string, bg color.Color) string {
+	pad := a.config.GUI.Padding
+
+	if a.searchFocused {
+		// Blue left bar when focused (like selected card style)
+		focusBorder := lipgloss.Border{Left: "▎"}
+		return lipgloss.NewStyle().
+			Width(a.width).
+			Padding(1, 0, 1, pad).
+			MarginBottom(1).
+			BorderLeft(true).
+			BorderStyle(focusBorder).
+			BorderForeground(lipgloss.ANSIColor(4)).
+			BorderBackground(bg).
+			Background(bg).
+			Render(searchContent)
+	}
+
+	return lipgloss.NewStyle().
+		Width(a.width).
+		Padding(1, 0, 1, pad+1). // +1 to match width with focused bar character
+		MarginBottom(1).
+		Background(bg).
+		Render(searchContent)
+}
+
 func (a App) renderFilterDisplay() string {
-	f := ParseFilter(a.searchInput.Value(), a.currentUser)
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4))
-	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
+	bg := lipgloss.Color("238")
+	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4)).Background(bg)
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Background(bg)
 
+	// Render tokens in their original order from the input
+	tokens := tokenize(a.searchInput.Value())
 	var parts []string
-	if f.Text != "" {
-		parts = append(parts, textStyle.Render(f.Text))
-	}
-	for _, m := range f.Members {
-		if strings.Contains(m, " ") {
-			parts = append(parts, tokenStyle.Render(fmt.Sprintf(`member:"%s"`, m)))
+	for _, tok := range tokens {
+		lower := strings.ToLower(tok)
+		if strings.HasPrefix(lower, "member:") || strings.HasPrefix(lower, "label:") {
+			parts = append(parts, tokenStyle.Render(tok))
 		} else {
-			parts = append(parts, tokenStyle.Render("member:"+m))
-		}
-	}
-	for _, l := range f.Labels {
-		if strings.Contains(l, " ") {
-			parts = append(parts, tokenStyle.Render(fmt.Sprintf(`label:"%s"`, l)))
-		} else {
-			parts = append(parts, tokenStyle.Render("label:"+l))
+			parts = append(parts, textStyle.Render(tok))
 		}
 	}
 
-	icon := dimStyle.Render("\uf002 ")
-	return icon + strings.Join(parts, " ")
+	iconStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
+	spaceStyle := lipgloss.NewStyle().Background(bg)
+	icon := iconStyle.Render("\uf002 ")
+	return icon + spaceStyle.Render(" ") + strings.Join(parts, " ")
 }
 
 func matchKey(msg tea.KeyPressMsg, binding key.Binding) bool {
@@ -1164,25 +1194,22 @@ func (a App) View() tea.View {
 	} else if a.loading {
 		content = "\n  Loading board...\n"
 	} else if a.boardReady {
-		// Render search bar
-		searchContent := a.searchInput.View()
-		if !a.searchFocused && a.searchInput.Value() != "" {
-			// Show the filter text with styled tokens when not focused
-			searchContent = a.renderFilterDisplay()
-		}
-		searchBar := lipgloss.NewStyle().
-			Width(a.board.width).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.ANSIColor(8)).
-			Render(searchContent)
-		a.board.SetSearchBar(searchBar)
+		a.board.dimColumns = a.searchFocused
 
-		// Render view bar at full screen width, above everything
+		// Render view bar at full screen width
 		boardName := ""
 		if a.board.board != nil {
 			boardName = a.board.board.Name
 		}
-		viewBarContent := a.viewBar.View(a.width, boardName)
+		viewBarContent := a.viewBar.View(a.width, boardName, a.config.GUI.Padding)
+
+		// Render search bar at full screen width, directly below view bar
+		searchContent := a.searchInput.View()
+		if !a.searchFocused && a.searchInput.Value() != "" {
+			searchContent = a.renderFilterDisplay()
+		}
+		searchBg := lipgloss.Color("238") // lighter than view bar (236)
+		searchBarContent := a.renderSearchBar(searchContent, searchBg)
 
 		var boardContent string
 		if a.detail.open {
@@ -1190,7 +1217,7 @@ func (a App) View() tea.View {
 		} else {
 			boardContent = a.board.View()
 		}
-		content = viewBarContent + "\n" + boardContent
+		content = viewBarContent + "\n" + searchBarContent + "\n" + boardContent
 
 		// Overlay member/label modal if open
 		if a.showMemberModal {

@@ -23,10 +23,11 @@ type BoardModel struct {
 	width       int
 	height      int
 	minColWidth int
+	padding     int
 	keyMap      KeyMap
 	theme       Theme
-	filter      Filter
-	searchBar   string
+	filter        Filter
+	dimColumns    bool // true when search bar is focused, dims active column border
 }
 
 func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) BoardModel {
@@ -39,6 +40,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 			width:       width,
 			height:      height,
 			minColWidth: cfg.GUI.ColumnWidth,
+			padding:     cfg.GUI.Padding,
 			keyMap:      km,
 			theme:       theme,
 		}
@@ -48,7 +50,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 	if cfg.GUI.ColumnWidth > 0 && colWidth < cfg.GUI.ColumnWidth {
 		colWidth = cfg.GUI.ColumnWidth
 	}
-	colHeight := height - 10 // 4 for chrome + 3 for breadcrumb border + 3 for search bar
+	colHeight := height - 7 // 4 for chrome + 3 for breadcrumb
 
 	columns := make([]Column, len(board.Lists))
 	for i, l := range board.Lists {
@@ -62,6 +64,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 		width:       width,
 		height:      height,
 		minColWidth: cfg.GUI.ColumnWidth,
+		padding:     cfg.GUI.Padding,
 		keyMap:      km,
 		theme:       theme,
 	}
@@ -79,7 +82,7 @@ func (b *BoardModel) ResizeColumns() {
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
 	}
-	colHeight := b.height - 8 // 3 for search bar + 3 for breadcrumb border + 2 for column border
+	colHeight := b.height - 5 // 3 for breadcrumb + 2 for column border
 	for i := range b.columns {
 		b.columns[i].SetSize(colWidth-2, colHeight)
 	}
@@ -246,11 +249,6 @@ func (b *BoardModel) HasFilter() bool {
 	return !b.filter.IsEmpty()
 }
 
-// SetSearchBar sets the rendered search bar content to display above the breadcrumb.
-func (b *BoardModel) SetSearchBar(rendered string) {
-	b.searchBar = rendered
-}
-
 // CalcNewPos calculates the position value for inserting a card at a given index in a column.
 func CalcNewPos(cards []trello.Card, targetIdx int) float64 {
 	if len(cards) == 0 {
@@ -308,18 +306,8 @@ func (b BoardModel) View() string {
 		Align(lipgloss.Center).
 		Render(breadcrumbText)
 
-	var header string
-	if b.searchBar != "" {
-		header = b.searchBar + "\n" + breadcrumb
-	} else {
-		header = breadcrumb
-	}
-
-	headerLines := 3 // breadcrumb
-	if b.searchBar != "" {
-		headerLines = 6 // search bar (3) + breadcrumb (3)
-	}
-	colH := b.height - headerLines
+	footerLines := 3 // breadcrumb
+	colH := b.height - footerLines
 
 	visibleCount := end - start
 	colWidth := b.width / visibleCount
@@ -333,7 +321,7 @@ func (b BoardModel) View() string {
 		col := b.columns[i]
 
 		borderColor := b.theme.InactiveBorder.GetForeground()
-		if i == b.focused {
+		if i == b.focused && !b.dimColumns {
 			borderColor = b.theme.ActiveBorder.GetForeground()
 		}
 
@@ -350,8 +338,12 @@ func (b BoardModel) View() string {
 			BorderForeground(borderColor)
 
 		var colContent string
-		if len(col.list.Items()) == 0 && !b.filter.IsEmpty() {
-			colContent = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("No matching cards")
+		if len(col.list.Items()) == 0 {
+			msg := "No items."
+			if !b.filter.IsEmpty() {
+				msg = "No matching cards"
+			}
+			colContent = lipgloss.NewStyle().PaddingLeft(b.padding).Foreground(lipgloss.ANSIColor(8)).Render(msg)
 		} else {
 			colContent = col.View()
 		}
@@ -362,7 +354,7 @@ func (b BoardModel) View() string {
 		// exact visible width of the original rendered top border.
 		if len(lines) > 0 {
 			origWidth := lipgloss.Width(lines[0])
-			title := fmt.Sprintf(" %s (%d) ", col.name, len(col.cards))
+			title := fmt.Sprintf(" %s (%d) ", col.name, len(col.list.Items()))
 			titleLen := len([]rune(title))
 			// origWidth = left corner + dashes + right corner
 			// new line  = left corner + 1 dash + title + trailing dashes + right corner
@@ -385,5 +377,5 @@ func (b BoardModel) View() string {
 	}
 
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, views...)
-	return header + "\n" + columns
+	return columns + "\n" + breadcrumb
 }

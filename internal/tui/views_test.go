@@ -91,7 +91,7 @@ func TestViewBarRender(t *testing.T) {
 		{Title: "All Cards"},
 	}
 	vb := NewViewBar(views)
-	rendered := vb.View(80, "Test Board")
+	rendered := vb.View(80, "Test Board", 1)
 	plain := ansiRegex.ReplaceAllString(rendered, "")
 	if !strings.Contains(plain, "My Cards") {
 		t.Errorf("expected 'My Cards' in rendered output, got %q", plain)
