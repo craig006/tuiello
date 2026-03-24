@@ -195,7 +195,7 @@ func AssignViewKeys(views []ViewConfig) []string {
 	return keys
 }
 
-// Load reads config with cascade: globalDir/config.yml → projectDir/.tuillo.yml.
+// Load reads config with cascade: globalDir/config.yml → projectDir/.tuiello.yml.
 // Either path can be empty to skip that layer.
 func Load(globalDir, projectDir string) (Config, error) {
 	cfg := DefaultConfig()
@@ -216,7 +216,7 @@ func Load(globalDir, projectDir string) (Config, error) {
 
 	// Load project-local config
 	if projectDir != "" {
-		v.SetConfigFile(filepath.Join(projectDir, ".tuillo.yml"))
+		v.SetConfigFile(filepath.Join(projectDir, ".tuiello.yml"))
 		if err := v.MergeInConfig(); err != nil {
 			// SetConfigFile returns os path errors (not ConfigFileNotFoundError) when file is absent
 			if _, ok := err.(viper.ConfigFileNotFoundError); !ok && !os.IsNotExist(err) {

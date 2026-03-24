@@ -2,7 +2,7 @@ package tui
 
 import (
 	"charm.land/bubbles/v2/key"
-	"github.com/craig006/tuillo/internal/config"
+	"github.com/craig006/tuiello/internal/config"
 )
 
 type KeyMap struct {

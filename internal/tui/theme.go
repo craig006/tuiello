@@ -2,7 +2,7 @@ package tui
 
 import (
 	"charm.land/lipgloss/v2"
-	"github.com/craig006/tuillo/internal/config"
+	"github.com/craig006/tuiello/internal/config"
 )
 
 type Theme struct {

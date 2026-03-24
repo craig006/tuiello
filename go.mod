@@ -1,4 +1,4 @@
-module github.com/craig006/tuillo
+module github.com/craig006/tuiello
 
 go 1.26.1
 

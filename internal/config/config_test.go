@@ -66,7 +66,7 @@ gui:
 `), 0644)
 
 	// project-local overrides board id
-	os.WriteFile(filepath.Join(projectDir, ".tuillo.yml"), []byte(`
+	os.WriteFile(filepath.Join(projectDir, ".tuiello.yml"), []byte(`
 board:
   id: "project-board"
 `), 0644)

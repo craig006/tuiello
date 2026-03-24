@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/craig006/tuillo/cmd"
+	"github.com/craig006/tuiello/cmd"
 )
 
 func main() {

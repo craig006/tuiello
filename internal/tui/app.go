@@ -13,9 +13,9 @@ import (
 	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/craig006/tuillo/internal/commands"
-	"github.com/craig006/tuillo/internal/config"
-	"github.com/craig006/tuillo/internal/trello"
+	"github.com/craig006/tuiello/internal/commands"
+	"github.com/craig006/tuiello/internal/config"
+	"github.com/craig006/tuiello/internal/trello"
 )
 
 // Messages
@@ -1249,7 +1249,7 @@ func (a App) View() tea.View {
 }
 
 func (a App) renderHelp() string {
-	title := lipgloss.NewStyle().Bold(true).Padding(1).Render("tuillo — Keyboard Shortcuts")
+	title := lipgloss.NewStyle().Bold(true).Padding(1).Render("tuiello — Keyboard Shortcuts")
 
 	keys := []struct{ key, desc string }{
 		{a.keyMap.Quit.Keys()[0], "Quit"},

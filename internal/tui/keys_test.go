@@ -2,7 +2,7 @@ package tui
 
 import (
 	"testing"
-	"github.com/craig006/tuillo/internal/config"
+	"github.com/craig006/tuiello/internal/config"
 )
 
 func TestDefaultKeyMap(t *testing.T) {

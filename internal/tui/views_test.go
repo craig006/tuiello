@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/craig006/tuillo/internal/config"
+	"github.com/craig006/tuiello/internal/config"
 )
 
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)

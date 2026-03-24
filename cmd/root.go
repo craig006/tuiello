@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/craig006/tuillo/internal/config"
-	"github.com/craig006/tuillo/internal/trello"
-	"github.com/craig006/tuillo/internal/tui"
+	"github.com/craig006/tuiello/internal/config"
+	"github.com/craig006/tuiello/internal/trello"
+	"github.com/craig006/tuiello/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -20,14 +20,14 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "tuillo",
+	Use:   "tuiello",
 	Short: "TUI client for Trello boards",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		globalDir, err := os.UserConfigDir()
 		if err != nil {
 			globalDir = ""
 		} else {
-			globalDir = globalDir + "/tuillo"
+			globalDir = globalDir + "/tuiello"
 		}
 
 		cwd, _ := os.Getwd()

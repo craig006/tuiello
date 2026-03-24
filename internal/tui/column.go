@@ -8,7 +8,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
-	"github.com/craig006/tuillo/internal/trello"
+	"github.com/craig006/tuiello/internal/trello"
 )
 
 // cardItem adapts trello.Card to bubbles/list.DefaultItem interface.

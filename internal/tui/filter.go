@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/craig006/tuillo/internal/trello"
+	"github.com/craig006/tuiello/internal/trello"
 )
 
 // Filter holds the parsed filter state.

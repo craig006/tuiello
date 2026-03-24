@@ -5,7 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/craig006/tuillo/internal/config"
+	"github.com/craig006/tuiello/internal/config"
 )
 
 // Version is set at build time via ldflags.
@@ -109,7 +109,7 @@ func (v ViewBar) View(width int, boardName string, padding int) string {
 	leftContent := boardSection + divider + viewsSection
 
 	// Build the right side: app name + version
-	appBrand := appNameStyle.Render("tuillo") + appVerStyle.Render(" "+Version)
+	appBrand := appNameStyle.Render("tuiello") + appVerStyle.Render(" "+Version)
 
 	// Calculate gap between left and right
 	bgSpace := lipgloss.NewStyle().Background(bg)

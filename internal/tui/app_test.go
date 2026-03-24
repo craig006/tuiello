@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/craig006/tuillo/internal/config"
-	"github.com/craig006/tuillo/internal/trello"
+	"github.com/craig006/tuiello/internal/config"
+	"github.com/craig006/tuiello/internal/trello"
 )
 
 func TestAppInitNoBoard(t *testing.T) {
