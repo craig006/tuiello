@@ -8,6 +8,9 @@ import (
 	"github.com/craig006/tuillo/internal/config"
 )
 
+// Version is set at build time via ldflags.
+var Version = "dev"
+
 // ViewBar manages the views tab bar state.
 type ViewBar struct {
 	views  []config.ViewConfig
@@ -69,31 +72,25 @@ func (v *ViewBar) SelectByKey(key string) bool {
 // Keys returns the assigned shortcut keys.
 func (v *ViewBar) Keys() []string { return v.keys }
 
-// View renders the tab bar at the given width with a board name prefix.
+// View renders the tab bar at the given width with a board name prefix and app branding.
 func (v ViewBar) View(width int, boardName string) string {
 	activeStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
 	activeKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
 	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-	boardNameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15))
+	dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
+	appNameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(4))
+	appVerStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 
-	// Calculate max title length for truncation
-	sepWidth := 3 // " • "
-	totalSepWidth := sepWidth * (len(v.views) - 1)
-	shortcutWidth := 4 // " ‹k›" per view
-	boardNameLen := len([]rune(boardName)) + 2 // +2 for "  " spacing
-	availableForTitles := width - 4 - totalSepWidth - (shortcutWidth * len(v.views)) - boardNameLen // 4 for border
-	maxTitleLen := availableForTitles / len(v.views)
-	if maxTitleLen < 5 {
-		maxTitleLen = 5
-	}
+	// Build the left side: " Board: <name> | Views: <tabs> "
+	boardSection := labelStyle.Render("Board: ") + valueStyle.Render(boardName)
+	divider := dividerStyle.Render(" | ")
 
-	var parts []string
+	var viewParts []string
 	for i, view := range v.views {
 		title := view.Title
-		if len([]rune(title)) > maxTitleLen {
-			title = string([]rune(title)[:maxTitleLen-1]) + "…"
-		}
 		shortcut := " ‹" + v.keys[i] + "›"
 
 		var tab string
@@ -102,12 +99,27 @@ func (v ViewBar) View(width int, boardName string) string {
 		} else {
 			tab = inactiveStyle.Render(title + shortcut)
 		}
-		parts = append(parts, tab)
+		viewParts = append(viewParts, tab)
 	}
 
-	sep := sepStyle.Render(" • ")
-	viewList := strings.Join(parts, sep)
-	content := boardNameStyle.Render(boardName) + "  " + viewList
+	viewSep := sepStyle.Render(" • ")
+	viewsSection := labelStyle.Render("Views: ") + strings.Join(viewParts, viewSep)
+
+	leftContent := boardSection + divider + viewsSection
+
+	// Build the right side: app name + version
+	appBrand := appNameStyle.Render("tuillo") + " " + appVerStyle.Render(Version)
+
+	// Calculate padding between left and right
+	leftWidth := lipgloss.Width(leftContent)
+	rightWidth := lipgloss.Width(appBrand)
+	innerWidth := width - 2 // 2 for border sides
+	padding := innerWidth - leftWidth - rightWidth - 2 // 2 for outer spacing
+	if padding < 1 {
+		padding = 1
+	}
+
+	content := leftContent + strings.Repeat(" ", padding) + appBrand
 
 	bar := lipgloss.NewStyle().
 		Width(width).

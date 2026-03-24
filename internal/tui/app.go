@@ -638,6 +638,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.boardReady && !a.showPalette {
 				a.searchFocused = true
 				a.searchInput.Focus()
+				// Add trailing space so new terms start fresh
+				if val := a.searchInput.Value(); val != "" && !strings.HasSuffix(val, " ") {
+					a.searchInput.SetValue(val + " ")
+				}
+				a.searchInput.CursorEnd()
 				return a, nil
 			}
 

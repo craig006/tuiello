@@ -303,8 +303,9 @@ func (b BoardModel) View() string {
 	breadcrumbText := strings.Join(breadcrumbParts, separator)
 	breadcrumb := lipgloss.NewStyle().
 		Width(b.width).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.ANSIColor(8)).
+		Height(1).
+		Padding(1, 0).
+		Align(lipgloss.Center).
 		Render(breadcrumbText)
 
 	var header string
