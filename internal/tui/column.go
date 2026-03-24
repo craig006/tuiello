@@ -234,6 +234,7 @@ func NewColumn(l trello.List, width, height int, focused bool) Column {
 	m := list.New(items, delegate, width, height)
 	m.SetShowTitle(false)
 	m.SetShowStatusBar(false)
+	m.SetShowHelp(false)
 	m.SetFilteringEnabled(false)
 	return Column{list: m, delegate: delegate, listID: l.ID, name: l.Name, cards: l.Cards}
 }

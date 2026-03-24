@@ -251,10 +251,10 @@ func (d DetailModel) View() string {
 
 	// Render panel with border
 	style := lipgloss.NewStyle().
-		Width(d.width - 2).
+		Width(d.width).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
-		Height(d.height - 2)
+		Height(d.height)
 
 	rendered := style.Render(d.viewport.View())
 	lines := strings.Split(rendered, "\n")

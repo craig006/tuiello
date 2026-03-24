@@ -47,6 +47,14 @@ type StatusMsg struct {
 	Text string
 }
 
+type CurrentUserMsg struct {
+	Username string
+}
+
+type CurrentUserErrMsg struct {
+	Err error
+}
+
 // commandItem wraps a custom command for display in the command palette.
 type commandItem struct {
 	cmd config.CustomCommandConfig
@@ -82,6 +90,10 @@ type App struct {
 	showPrompt     bool
 	promptType     string // "confirm", "input", "menu"
 
+	// Views
+	viewBar     ViewBar
+	currentUser string // resolved Trello username for @me
+
 	// Filter search bar
 	searchInput   textinput.Model
 	searchFocused bool
@@ -107,6 +119,7 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		commandPalette: palette,
 		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme)),
 	}
+	a.viewBar = NewViewBar(cfg.Views)
 	si := textinput.New()
 	si.Placeholder = "Search... (/ to focus, ctrl+m members, ctrl+l labels, esc clear)"
 	si.Prompt = "\uf002 "
@@ -115,17 +128,28 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 	return a
 }
 
+func (a App) fetchCurrentUserCmd() tea.Cmd {
+	return func() tea.Msg {
+		user, err := a.client.FetchCurrentUser()
+		if err != nil {
+			return CurrentUserErrMsg{Err: err}
+		}
+		return CurrentUserMsg{Username: user.Username}
+	}
+}
+
 func (a App) Init() tea.Cmd {
+	userCmd := a.fetchCurrentUserCmd()
 	boardID := a.config.Board.ID
 	if boardID == "" && a.config.Board.Name != "" {
-		return a.resolveBoardCmd(a.config.Board.Name)
+		return tea.Batch(a.resolveBoardCmd(a.config.Board.Name), userCmd)
 	}
 	if boardID == "" {
-		return func() tea.Msg {
+		return tea.Batch(func() tea.Msg {
 			return BoardFetchErrMsg{Err: fmt.Errorf("no board configured — use --board or --board-id, or set board.id in config")}
-		}
+		}, userCmd)
 	}
-	return a.fetchBoardCmd(boardID)
+	return tea.Batch(a.fetchBoardCmd(boardID), userCmd)
 }
 
 func (a App) resolveBoardCmd(name string) tea.Cmd {
@@ -235,15 +259,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.boardReady = true
 		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height)
 		a.updateSearchWidth()
-		// Re-apply current filter if any
-		if a.searchInput.Value() != "" {
-			f := ParseFilter(a.searchInput.Value(), "")
+		// Apply active view's filter
+		viewCfg := a.viewBar.ActiveConfig()
+		if viewCfg.Filter != "" {
+			a.searchInput.SetValue(viewCfg.Filter)
+			f := ParseFilter(viewCfg.Filter, a.currentUser)
+			a.board.ApplyFilter(f)
+		} else if a.searchInput.Value() != "" {
+			f := ParseFilter(a.searchInput.Value(), a.currentUser)
 			a.board.ApplyFilter(f)
 		}
 		a.status = fmt.Sprintf("%s — %s", msg.Board.Name, a.board.PositionIndicator())
+		showDetail := a.config.GUI.ShowDetailPanel
+		if viewCfg.ShowDetailPanel != nil {
+			showDetail = *viewCfg.ShowDetailPanel
+		}
 		a.detail.open = false
 		a.detail.cardID = ""
-		if a.config.GUI.ShowDetailPanel && a.width >= 80 {
+		if showDetail && a.width >= 80 {
 			a.detail.open = true
 			if card, _, ok := a.board.SelectedCard(); ok {
 				a.detail.SetCard(card)
@@ -304,6 +337,23 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CardChecklistsFetchErrMsg:
 		a.detail.HandleChecklistsFetchErr(msg)
+		return a, nil
+
+	case CurrentUserMsg:
+		a.currentUser = msg.Username
+		// Re-apply active view's filter now that @me can resolve
+		if a.boardReady {
+			viewCfg := a.viewBar.ActiveConfig()
+			if viewCfg.Filter != "" {
+				a.searchInput.SetValue(viewCfg.Filter)
+				f := ParseFilter(viewCfg.Filter, a.currentUser)
+				a.board.ApplyFilter(f)
+			}
+		}
+		return a, nil
+
+	case CurrentUserErrMsg:
+		// Graceful degradation — @me won't resolve but app continues
 		return a, nil
 
 	case tea.KeyPressMsg:
@@ -398,7 +448,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter", "esc":
 				// Close modal and update search bar with selections
 				selected := modal.Selected()
-				currentFilter := ParseFilter(a.searchInput.Value(), "")
+				currentFilter := ParseFilter(a.searchInput.Value(), a.currentUser)
 				if isLabel {
 					currentFilter.Labels = selected
 				} else {
@@ -424,15 +474,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				a.searchFocused = false
 				a.searchInput.Blur()
-				a.searchInput.SetValue("")
-				a.board.ClearFilter()
+				// Reset to view's base filter instead of clearing completely
+				viewCfg := a.viewBar.ActiveConfig()
+				a.searchInput.SetValue(viewCfg.Filter)
+				if viewCfg.Filter != "" {
+					f := ParseFilter(viewCfg.Filter, a.currentUser)
+					a.board.ApplyFilter(f)
+				} else {
+					a.board.ClearFilter()
+				}
 				fetchCmd := a.syncDetailAfterFilter()
 				return a, fetchCmd
 			default:
 				var cmd tea.Cmd
 				a.searchInput, cmd = a.searchInput.Update(msg)
 				// Live filtering on every keystroke
-				f := ParseFilter(a.searchInput.Value(), "")
+				f := ParseFilter(a.searchInput.Value(), a.currentUser)
 				a.board.ApplyFilter(f)
 				fetchCmd := a.syncDetailAfterFilter()
 				if fetchCmd != nil {
@@ -583,7 +640,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.FilterMembers):
 			if a.boardReady && !a.showPalette && !a.searchFocused {
-				currentFilter := ParseFilter(a.searchInput.Value(), "")
+				currentFilter := ParseFilter(a.searchInput.Value(), a.currentUser)
 				var items []MultiSelectItem
 				for _, m := range a.board.board.Members {
 					checked := false
@@ -606,7 +663,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.FilterLabels):
 			if a.boardReady && !a.showPalette && !a.searchFocused {
-				currentFilter := ParseFilter(a.searchInput.Value(), "")
+				currentFilter := ParseFilter(a.searchInput.Value(), a.currentUser)
 				// Collect unique labels from all cards across all columns
 				seen := make(map[string]bool)
 				var items []MultiSelectItem
@@ -646,12 +703,40 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 
+		case matchKey(msg, a.keyMap.ViewNext):
+			if a.boardReady {
+				a.viewBar.Next()
+				return a, a.applyActiveView()
+			}
+
+		case matchKey(msg, a.keyMap.ViewPrev):
+			if a.boardReady {
+				a.viewBar.Prev()
+				return a, a.applyActiveView()
+			}
+
 		case msg.String() == "esc":
-			if a.boardReady && !a.showPalette && !a.showPrompt && a.board.HasFilter() {
-				a.searchInput.SetValue("")
-				a.board.ClearFilter()
-				fetchCmd := a.syncDetailAfterFilter()
-				return a, fetchCmd
+			if a.boardReady && !a.showPalette && !a.showPrompt {
+				viewCfg := a.viewBar.ActiveConfig()
+				if a.searchInput.Value() != viewCfg.Filter {
+					// Reset to view's base filter
+					a.searchInput.SetValue(viewCfg.Filter)
+					if viewCfg.Filter != "" {
+						f := ParseFilter(viewCfg.Filter, a.currentUser)
+						a.board.ApplyFilter(f)
+					} else {
+						a.board.ClearFilter()
+					}
+					fetchCmd := a.syncDetailAfterFilter()
+					return a, fetchCmd
+				}
+			}
+		}
+
+		// Direct-jump view switching — checked last so it never shadows standard keys
+		if a.boardReady && !a.showPalette && !a.showPrompt && !a.searchFocused && !a.showMemberModal && !a.showLabelModal {
+			if a.viewBar.SelectByKey(msg.String()) {
+				return a, a.applyActiveView()
 			}
 		}
 
@@ -966,8 +1051,54 @@ func (a *App) syncDetailAfterFilter() tea.Cmd {
 	return nil
 }
 
+// applyActiveView applies the active view's filter and GUI overrides.
+func (a *App) applyActiveView() tea.Cmd {
+	viewCfg := a.viewBar.ActiveConfig()
+
+	// Reset search bar to view's base filter
+	a.searchInput.SetValue(viewCfg.Filter)
+	if viewCfg.Filter != "" {
+		f := ParseFilter(viewCfg.Filter, a.currentUser)
+		a.board.ApplyFilter(f)
+	} else {
+		a.board.ClearFilter()
+	}
+
+	// Apply GUI overrides
+	if viewCfg.ColumnWidth != nil {
+		a.board.minColWidth = *viewCfg.ColumnWidth
+		a.board.ResizeColumns()
+	}
+
+	if viewCfg.ShowDetailPanel != nil {
+		shouldShow := *viewCfg.ShowDetailPanel
+		if shouldShow && !a.detail.open && a.width >= 80 {
+			a.detail.open = true
+			if card, _, ok := a.board.SelectedCard(); ok {
+				a.detail.SetCard(card)
+				a.updateDetailLayout()
+				if a.detail.NeedsFetch() {
+					a.detail.MarkLoading()
+					return a.fetchDetailData()
+				}
+			} else {
+				a.updateDetailLayout()
+			}
+		} else if !shouldShow && a.detail.open {
+			a.detail.open = false
+			a.detail.cardID = ""
+			a.board.width = a.width
+			a.board.height = a.height
+			a.board.ResizeColumns()
+			a.updateSearchWidth()
+		}
+	}
+
+	return a.syncDetailAfterFilter()
+}
+
 func (a App) renderFilterDisplay() string {
-	f := ParseFilter(a.searchInput.Value(), "")
+	f := ParseFilter(a.searchInput.Value(), a.currentUser)
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
 	tokenStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4))
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
@@ -1036,7 +1167,8 @@ func (a App) View() tea.View {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.ANSIColor(8)).
 			Render(searchContent)
-		a.board.SetSearchBar(searchBar)
+		viewBarContent := a.viewBar.View(a.board.width)
+		a.board.SetSearchBar(viewBarContent + "\n" + searchBar)
 
 		if a.detail.open {
 			content = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
@@ -1096,7 +1228,14 @@ func (a App) renderHelp() string {
 		{a.keyMap.FilterFocus.Keys()[0], "Search/filter"},
 		{a.keyMap.FilterMembers.Keys()[0], "Filter by member"},
 		{a.keyMap.FilterLabels.Keys()[0], "Filter by label"},
+		{a.keyMap.ViewNext.Keys()[0] + "/" + a.keyMap.ViewPrev.Keys()[0], "Cycle views"},
 		{"esc", "Clear filters"},
+	}
+
+	for i, view := range a.viewBar.views {
+		keys = append(keys, struct{ key, desc string }{
+			a.viewBar.keys[i], "View: " + view.Title,
+		})
 	}
 
 	lines := title + "\n\n"

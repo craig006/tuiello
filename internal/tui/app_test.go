@@ -20,9 +20,25 @@ func TestAppInitNoBoard(t *testing.T) {
 		t.Fatal("expected a command for missing board error")
 	}
 
+	// Init now returns tea.Batch, which produces a BatchMsg containing multiple commands.
+	// One of the batched commands should produce a BoardFetchErrMsg.
 	msg := cmd()
-	if _, ok := msg.(BoardFetchErrMsg); !ok {
-		t.Errorf("expected BoardFetchErrMsg, got %T", msg)
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("expected tea.BatchMsg, got %T", msg)
+	}
+	foundErr := false
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		m := c()
+		if _, ok := m.(BoardFetchErrMsg); ok {
+			foundErr = true
+		}
+	}
+	if !foundErr {
+		t.Error("expected one of the batched commands to produce BoardFetchErrMsg")
 	}
 }
 
@@ -59,6 +75,7 @@ func TestAppBoardFetchedMsg(t *testing.T) {
 func TestAppMoveCardUpTwice(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
 	client := trello.NewClient("key", "token")
 	app := NewApp(client, cfg)
 	app.width = 90
