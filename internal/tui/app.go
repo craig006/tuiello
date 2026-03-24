@@ -108,8 +108,8 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme)),
 	}
 	si := textinput.New()
-	si.Placeholder = "\uf002 Search..."
-	si.Prompt = ""
+	si.Placeholder = "Search... (/ to focus, ctrl+m members, ctrl+l labels, esc clear)"
+	si.Prompt = "\uf002 "
 	si.SetWidth(0) // will be set on first render
 	a.searchInput = si
 	return a
