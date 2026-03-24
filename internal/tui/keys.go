@@ -13,6 +13,7 @@ type KeyMap struct {
 	DetailToggle, DetailTabPrev, DetailTabNext             key.Binding
 	DetailScrollDown, DetailScrollUp                       key.Binding
 	FilterFocus, FilterMembers, FilterLabels              key.Binding
+	ViewNext, ViewPrev                                     key.Binding
 }
 
 func NewKeyMap(cfg config.KeybindingConfig) KeyMap {
@@ -38,5 +39,7 @@ func NewKeyMap(cfg config.KeybindingConfig) KeyMap {
 		FilterFocus:      key.NewBinding(key.WithKeys(cfg.Filter.Focus), key.WithHelp(cfg.Filter.Focus, "search")),
 		FilterMembers:    key.NewBinding(key.WithKeys(cfg.Filter.Members), key.WithHelp(cfg.Filter.Members, "filter members")),
 		FilterLabels:     key.NewBinding(key.WithKeys(cfg.Filter.Labels), key.WithHelp(cfg.Filter.Labels, "filter labels")),
+		ViewNext:         key.NewBinding(key.WithKeys(cfg.Views.NextView), key.WithHelp(cfg.Views.NextView, "next view")),
+		ViewPrev:         key.NewBinding(key.WithKeys(cfg.Views.PrevView), key.WithHelp(cfg.Views.PrevView, "prev view")),
 	}
 }
