@@ -243,6 +243,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.status = fmt.Sprintf("%s — %s", msg.Board.Name, a.board.PositionIndicator())
 		a.detail.open = false
 		a.detail.cardID = ""
+		if a.config.GUI.ShowDetailPanel && a.width >= 80 {
+			a.detail.open = true
+			if card, _, ok := a.board.SelectedCard(); ok {
+				a.detail.SetCard(card)
+				a.updateDetailLayout()
+				if a.detail.NeedsFetch() {
+					a.detail.MarkLoading()
+					return a, a.fetchDetailData()
+				}
+			} else {
+				a.updateDetailLayout()
+			}
+		}
 		return a, nil
 
 	case BoardFetchErrMsg:

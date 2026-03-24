@@ -16,9 +16,10 @@ type Config struct {
 }
 
 type GUIConfig struct {
-	Theme          ThemeConfig `mapstructure:"theme"`
-	ColumnWidth    int         `mapstructure:"columnWidth"`
-	ShowCardLabels bool        `mapstructure:"showCardLabels"`
+	Theme            ThemeConfig `mapstructure:"theme"`
+	ColumnWidth      int         `mapstructure:"columnWidth"`
+	ShowCardLabels   bool        `mapstructure:"showCardLabels"`
+	ShowDetailPanel  bool        `mapstructure:"showDetailPanel"`
 }
 
 type ThemeConfig struct {
@@ -103,8 +104,9 @@ func DefaultConfig() Config {
 				SelectedCardColor:   []string{"6"},
 				ColumnTitleColor:    []string{"5", "bold"},
 			},
-			ColumnWidth:    30,
-			ShowCardLabels: true,
+			ColumnWidth:     30,
+			ShowCardLabels:  true,
+			ShowDetailPanel: true,
 		},
 		Keybinding: KeybindingConfig{
 			Universal: UniversalKeys{
