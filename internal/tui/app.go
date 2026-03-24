@@ -704,13 +704,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case matchKey(msg, a.keyMap.ViewNext):
-			if a.boardReady {
+			if a.boardReady && !a.showPalette && !a.showPrompt && !a.searchFocused && !a.showMemberModal && !a.showLabelModal {
 				a.viewBar.Next()
 				return a, a.applyActiveView()
 			}
 
 		case matchKey(msg, a.keyMap.ViewPrev):
-			if a.boardReady {
+			if a.boardReady && !a.showPalette && !a.showPrompt && !a.searchFocused && !a.showMemberModal && !a.showLabelModal {
 				a.viewBar.Prev()
 				return a, a.applyActiveView()
 			}
