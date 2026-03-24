@@ -53,12 +53,51 @@ tuiello --board "Board Name"
 
 ## Configuration
 
-tuiello looks for configuration in two places (merged in order):
+tuiello uses a two-level config system. Each level has a settings file and an optional auth file:
 
-1. `~/.config/tuiello/config.yml` — global config
-2. `.tuiello.yml` — project-local config (in current directory)
+```
+~/.config/tuiello/          # global
+├── config.yml              # settings
+└── auth.yml                # credentials
 
-Key config sections:
+<project>/.tuiello/         # project-local (overrides global)
+├── config.yml              # project settings
+└── auth.yml                # project credentials
+```
+
+All files are optional. Values merge in order: global config → global auth → project config → project auth. Environment variables and CLI flags override everything.
+
+### Credentials
+
+Set your Trello credentials in `auth.yml`:
+
+```yaml
+auth:
+  apiKey: your-api-key
+  token: your-token
+```
+
+Or use environment variables: `TRELLO_API_KEY` and `TRELLO_TOKEN`.
+
+### Board
+
+Set a default board so you can launch with just `tuiello`:
+
+```yaml
+board:
+  name: "My Board"
+```
+
+Or by ID:
+
+```yaml
+board:
+  id: "abc123"
+```
+
+CLI flags `--board` and `--board-id` override config values.
+
+### Settings
 
 ```yaml
 gui:
