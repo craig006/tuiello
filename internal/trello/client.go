@@ -84,6 +84,20 @@ func (c *Client) ValidateCredentials() error {
 	return c.get("/1/members/me", &result)
 }
 
+// FetchCurrentUser retrieves the authenticated user's member record.
+func (c *Client) FetchCurrentUser() (Member, error) {
+	var am apiMember
+	if err := c.get("/1/members/me?fields=id,fullName,initials,username", &am); err != nil {
+		return Member{}, err
+	}
+	return Member{
+		ID:       am.ID,
+		FullName: am.FullName,
+		Initials: am.Initials,
+		Username: am.Username,
+	}, nil
+}
+
 type apiBoard struct {
 	ID           string           `json:"id"`
 	Name         string           `json:"name"`
