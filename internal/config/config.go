@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/viper"
 )
@@ -13,6 +14,7 @@ type Config struct {
 	Board          BoardConfig           `mapstructure:"board"`
 	Keybinding     KeybindingConfig      `mapstructure:"keybinding"`
 	CustomCommands []CustomCommandConfig `mapstructure:"customCommands"`
+	Views          []ViewConfig          `mapstructure:"views"`
 }
 
 type GUIConfig struct {
@@ -39,6 +41,7 @@ type KeybindingConfig struct {
 	Board     BoardKeys     `mapstructure:"board"`
 	Detail    DetailKeys    `mapstructure:"detail"`
 	Filter    FilterKeys    `mapstructure:"filter"`
+	Views     ViewKeys      `mapstructure:"views"`
 }
 
 type FilterKeys struct {
@@ -95,6 +98,20 @@ type OptionConfig struct {
 	Value string `mapstructure:"value"`
 }
 
+type ViewConfig struct {
+	Title           string `mapstructure:"title"`
+	Filter          string `mapstructure:"filter"`
+	Key             string `mapstructure:"key"`
+	ShowDetailPanel *bool  `mapstructure:"showDetailPanel"`
+	ColumnWidth     *int   `mapstructure:"columnWidth"`
+	ShowCardLabels  *bool  `mapstructure:"showCardLabels"`
+}
+
+type ViewKeys struct {
+	NextView string `mapstructure:"nextView"`
+	PrevView string `mapstructure:"prevView"`
+}
+
 func DefaultConfig() Config {
 	return Config{
 		GUI: GUIConfig{
@@ -138,8 +155,42 @@ func DefaultConfig() Config {
 				Members: "ctrl+m",
 				Labels:  "ctrl+l",
 			},
+			Views: ViewKeys{
+				NextView: "v",
+				PrevView: "V",
+			},
+		},
+		Views: []ViewConfig{
+			{Title: "My Cards", Filter: "member:@me", Key: "m"},
+			{Title: "All Cards"},
 		},
 	}
+}
+
+// AssignViewKeys assigns shortcut keys to views. Views with a custom Key
+// keep it (first occurrence wins for duplicates). Views without a Key get
+// auto-assigned incrementing numbers, skipping already-used keys.
+func AssignViewKeys(views []ViewConfig) []string {
+	used := map[string]bool{}
+	keys := make([]string, len(views))
+	for i, v := range views {
+		if v.Key != "" && !used[v.Key] {
+			keys[i] = v.Key
+			used[v.Key] = true
+		}
+	}
+	next := 1
+	for i := range views {
+		if keys[i] == "" {
+			for used[strconv.Itoa(next)] {
+				next++
+			}
+			keys[i] = strconv.Itoa(next)
+			used[strconv.Itoa(next)] = true
+			next++
+		}
+	}
+	return keys
 }
 
 // Load reads config with cascade: globalDir/config.yml → projectDir/.tuillo.yml.

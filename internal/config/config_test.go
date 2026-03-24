@@ -102,3 +102,90 @@ func TestDefaultDetailKeys(t *testing.T) {
 		t.Errorf("expected detail scrollUp 'ctrl+k', got %q", cfg.Keybinding.Detail.ScrollUp)
 	}
 }
+
+func TestDefaultConfigHasDefaultViews(t *testing.T) {
+	cfg := DefaultConfig()
+	if len(cfg.Views) != 2 {
+		t.Fatalf("expected 2 default views, got %d", len(cfg.Views))
+	}
+	if cfg.Views[0].Title != "My Cards" {
+		t.Errorf("expected first view 'My Cards', got %q", cfg.Views[0].Title)
+	}
+	if cfg.Views[0].Filter != "member:@me" {
+		t.Errorf("expected first view filter 'member:@me', got %q", cfg.Views[0].Filter)
+	}
+	if cfg.Views[0].Key != "m" {
+		t.Errorf("expected first view key 'm', got %q", cfg.Views[0].Key)
+	}
+	if cfg.Views[1].Title != "All Cards" {
+		t.Errorf("expected second view 'All Cards', got %q", cfg.Views[1].Title)
+	}
+}
+
+func TestDefaultConfigHasViewKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Keybinding.Views.NextView != "v" {
+		t.Errorf("expected nextView 'v', got %q", cfg.Keybinding.Views.NextView)
+	}
+	if cfg.Keybinding.Views.PrevView != "V" {
+		t.Errorf("expected prevView 'V', got %q", cfg.Keybinding.Views.PrevView)
+	}
+}
+
+func TestAssignViewKeys(t *testing.T) {
+	views := []ViewConfig{
+		{Title: "My Cards", Key: "m"},
+		{Title: "Mobile Cards"},
+		{Title: "All Cards"},
+	}
+	keys := AssignViewKeys(views)
+	if keys[0] != "m" {
+		t.Errorf("expected 'm', got %q", keys[0])
+	}
+	if keys[1] != "1" {
+		t.Errorf("expected '1', got %q", keys[1])
+	}
+	if keys[2] != "2" {
+		t.Errorf("expected '2', got %q", keys[2])
+	}
+}
+
+func TestAssignViewKeysSkipsUsedNumbers(t *testing.T) {
+	views := []ViewConfig{
+		{Title: "A", Key: "1"},
+		{Title: "B"},
+		{Title: "C"},
+	}
+	keys := AssignViewKeys(views)
+	if keys[0] != "1" {
+		t.Errorf("expected '1', got %q", keys[0])
+	}
+	if keys[1] != "2" {
+		t.Errorf("expected '2', got %q", keys[1])
+	}
+	if keys[2] != "3" {
+		t.Errorf("expected '3', got %q", keys[2])
+	}
+}
+
+func TestAssignViewKeysDuplicateCustomKey(t *testing.T) {
+	views := []ViewConfig{
+		{Title: "A", Key: "m"},
+		{Title: "B", Key: "m"},
+	}
+	keys := AssignViewKeys(views)
+	// First keeps the key, second duplicate gets auto-assigned
+	if keys[0] != "m" {
+		t.Errorf("expected 'm', got %q", keys[0])
+	}
+	if keys[1] != "1" {
+		t.Errorf("expected '1' (duplicate overridden), got %q", keys[1])
+	}
+}
+
+func TestAssignViewKeysEmptyViews(t *testing.T) {
+	keys := AssignViewKeys(nil)
+	if len(keys) != 0 {
+		t.Errorf("expected empty keys, got %v", keys)
+	}
+}
