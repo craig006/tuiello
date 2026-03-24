@@ -43,7 +43,7 @@ type AuthConfig struct {
 }
 ```
 
-Added to the top-level `Config` struct as `Auth AuthConfig`. No defaults — both fields are empty strings by default.
+Added to the top-level `Config` struct as `Auth AuthConfig `mapstructure:"auth"``). No defaults — both fields are empty strings by default.
 
 ### auth.yml Format
 
@@ -55,9 +55,11 @@ auth:
 
 ### Credential Resolution in root.go
 
+All credential and board resolution happens in `PersistentPreRunE` so that any future subcommands also have access to the resolved config.
+
 1. Config cascade fills `appConfig.Auth.APIKey` and `appConfig.Auth.Token`
 2. Env vars override: if `TRELLO_API_KEY` is set, it wins; same for `TRELLO_TOKEN`
-3. If both are still empty after all layers, show error with instructions for both config and env var options
+3. `RunE` reads the final `appConfig.Auth` values — if both are still empty, show error with instructions for both config and env var options
 
 Env vars remain supported for backwards compatibility and for CI/scripting use cases.
 
@@ -79,7 +81,7 @@ Either field can be set independently. Both don't need to be set.
 
 1. Config cascade fills `appConfig.Board.ID` and `appConfig.Board.Name`
 2. CLI flags override: `--board-id` overrides `Board.ID`, `--board` overrides `Board.Name`
-3. Board lookup: if `ID` is set, fetch by ID; if that fails (or isn't set) and `Name` is set, search by name; if neither is set, show an error
+3. Board lookup: if `ID` is set, fetch by ID; if ID is not set (or returns a "not found" error) and `Name` is set, search by name; if neither is set, show an error. Hard failures (network errors, auth errors) are not retried with name fallback — only "not found" triggers fallback.
 
 ## Config Loader Changes
 
@@ -89,14 +91,36 @@ The `Load` function signature stays the same:
 func Load(globalDir, projectDir string) (Config, error)
 ```
 
-Internally it merges four files instead of two:
+Internally it merges four files instead of two. Each file is loaded via `v.SetConfigFile(absolutePath)` followed by `v.MergeInConfig()`:
 
-1. `globalDir/config.yml` (existing, unchanged)
-2. `globalDir/auth.yml` (new)
-3. `projectDir/.tuiello/config.yml` (was `projectDir/.tuiello.yml`)
-4. `projectDir/.tuiello/auth.yml` (new)
+```go
+files := []string{
+    filepath.Join(globalDir, "config.yml"),
+    filepath.Join(globalDir, "auth.yml"),
+    filepath.Join(projectDir, ".tuiello", "config.yml"),
+    filepath.Join(projectDir, ".tuiello", "auth.yml"),
+}
+for _, f := range files {
+    v.SetConfigFile(f)
+    if err := v.MergeInConfig(); err != nil {
+        // skip missing files, return real errors
+    }
+}
+```
 
-All four use Viper's `MergeInConfig`. Since Viper merges at the key level, `auth.apiKey` in `auth.yml` and `board.name` in `config.yml` don't clobber each other.
+Since Viper merges at the key level, `auth.apiKey` in `auth.yml` and `board.name` in `config.yml` don't clobber each other.
+
+The existing test `TestCascadeProjectLocal` writes `.tuiello.yml` and must be updated to write `.tuiello/config.yml` instead.
+
+## .gitignore Update
+
+Add `.tuiello/auth.yml` to `.gitignore` to prevent accidental credential commits:
+
+```
+.tuiello/auth.yml
+```
+
+This gitignores only the auth file — `.tuiello/config.yml` remains committable so teams can share board/GUI settings.
 
 ## Error Message Update
 
@@ -137,6 +161,16 @@ The Configuration section of README.md is updated to document:
 - Board config from files (existing struct, existing lookup logic)
 - Updated error message
 - Updated README
+
+### Test Cases
+
+- Four-file merge: global config → global auth → project config → project auth, each layer overrides the previous
+- Missing files silently skipped (no error when any of the four files is absent)
+- Auth from `auth.yml` populates `Config.Auth.APIKey` and `Config.Auth.Token`
+- Project auth overrides global auth
+- Env vars override config-file auth values
+- CLI flags override config-file board values
+- Existing `TestCascadeProjectLocal` updated for `.tuiello/config.yml` directory structure
 
 ### Not Included
 - `tuiello auth` guided setup command (separate feature, out of scope)
