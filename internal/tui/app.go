@@ -175,6 +175,11 @@ func (a App) reorderCardCmd(cardID string, pos float64) tea.Cmd {
 	}
 }
 
+func (a *App) updateSearchWidth() {
+	// border (2) + prompt icon+space (2) = 4 chars of chrome
+	a.searchInput.SetWidth(a.board.width - 4)
+}
+
 func (a *App) updateDetailLayout() {
 	boardWidth := a.width * 60 / 100
 	panelWidth := a.width - boardWidth - 1 // 1 char spacer between board and detail
@@ -182,6 +187,7 @@ func (a *App) updateDetailLayout() {
 	a.board.height = a.height
 	a.board.ResizeColumns()
 	a.detail.SetSize(panelWidth, a.height)
+	a.updateSearchWidth()
 }
 
 func (a App) fetchDetailData() tea.Cmd {
@@ -219,6 +225,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.board.width = msg.Width
 				a.board.height = msg.Height
 				a.board.ResizeColumns()
+				a.updateSearchWidth()
 			}
 		}
 		return a, nil
@@ -227,6 +234,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.loading = false
 		a.boardReady = true
 		a.board = NewBoardModel(msg.Board, a.config, a.width, a.height)
+		a.updateSearchWidth()
 		// Re-apply current filter if any
 		if a.searchInput.Value() != "" {
 			f := ParseFilter(a.searchInput.Value())
@@ -516,6 +524,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.board.width = a.width
 					a.board.height = a.height
 					a.board.ResizeColumns()
+					a.updateSearchWidth()
 				}
 				return a, nil
 			}
