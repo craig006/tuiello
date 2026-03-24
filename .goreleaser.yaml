@@ -1,0 +1,31 @@
+version: 2
+
+builds:
+  - binary: tuiello
+    main: .
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/craig006/tuiello/internal/tui.Version={{.Version}}
+
+archives:
+  - format: tar.gz
+    name_template: "tuiello_{{.Version}}_{{.Os}}_{{.Arch}}"
+    files:
+      - LICENSE
+      - README.md
+
+changelog:
+  sort: asc
+
+brews:
+  - repository:
+      owner: craig006
+      name: homebrew-tuiello
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/craig006/tuiello"
+    description: "A TUI client for Trello"
