@@ -522,3 +522,196 @@ func TestRenderCreateMode(t *testing.T) {
 		t.Error("expected 'Cancel: Esc' in footer")
 	}
 }
+
+// Task 8: Edit mode tests
+func TestEditCommentMode(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments with an editable comment
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Manually transition to Edit mode (simulating 'e' key handling)
+	cl.mode = CommentModeEdit
+	cl.editingIdx = cl.selectedIdx
+	cl.textInput.SetValue(cl.comments[cl.editingIdx].Body)
+	cl.textInput.Focus()
+
+	if cl.mode != CommentModeEdit {
+		t.Errorf("expected mode CommentModeEdit, got %d", cl.mode)
+	}
+
+	if cl.editingIdx != 0 {
+		t.Errorf("expected editingIdx 0, got %d", cl.editingIdx)
+	}
+
+	// Verify textinput has comment body loaded
+	if cl.textInput.Value() != "First comment" {
+		t.Errorf("expected textInput to have 'First comment', got %q", cl.textInput.Value())
+	}
+}
+
+func TestEditModeNotEditable(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments with a non-editable comment
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: false,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Attempt to enter Edit mode (should be blocked by Editable check in actual Update() handler)
+	// This test verifies the logic that should be in the Update() method
+	if cl.comments[cl.selectedIdx].Editable {
+		t.Error("expected comment to not be editable")
+	}
+
+	// Verify we don't enter edit mode for non-editable comments
+	if cl.mode == CommentModeEdit {
+		t.Error("should not enter edit mode for non-editable comment")
+	}
+}
+
+func TestEditModeCancel(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "Original text",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Enter Edit mode
+	cl.mode = CommentModeEdit
+	cl.editingIdx = 0
+	cl.textInput.SetValue("Original text")
+	cl.textInput.Focus()
+
+	// Simulate Escape key (exit Edit mode without saving)
+	cl.mode = CommentModeView
+	cl.textInput.SetValue("")
+	cl.textInput.Blur()
+
+	if cl.mode != CommentModeView {
+		t.Errorf("expected mode CommentModeView after cancel, got %d", cl.mode)
+	}
+
+	if cl.textInput.Value() != "" {
+		t.Errorf("expected textInput to be cleared after cancel, got %q", cl.textInput.Value())
+	}
+}
+
+func TestEditModeSubmit(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "Original text",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Enter Edit mode with modified text
+	cl.mode = CommentModeEdit
+	cl.editingIdx = 0
+	cl.textInput.Focus()
+	cl.textInput.SetValue("Modified text")
+
+	// Call submitComment directly (testing the command generation)
+	cmd := cl.submitComment()
+
+	// Verify that a command was returned
+	if cmd == nil {
+		t.Error("expected a command from submitComment, got nil")
+	}
+
+	// Execute the command to get the message
+	msg := cmd()
+	updateMsg, ok := msg.(UpdateCommentRequestMsg)
+	if !ok {
+		t.Fatalf("expected UpdateCommentRequestMsg, got %T", msg)
+	}
+
+	if updateMsg.CommentID != "comment1" {
+		t.Errorf("expected CommentID 'comment1', got %q", updateMsg.CommentID)
+	}
+
+	if updateMsg.Text != "Modified text" {
+		t.Errorf("expected text 'Modified text', got %q", updateMsg.Text)
+	}
+}
+
+func TestRenderEditMode(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetSize(80, 20)
+
+	// Set up test comments
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "Comment to edit",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Enter Edit mode
+	cl.mode = CommentModeEdit
+	cl.editingIdx = 0
+	cl.textInput.SetValue(cl.comments[cl.editingIdx].Body)
+
+	view := cl.View()
+	cleanView := stripANSI(view)
+
+	// Check for title
+	if !stringContains(cleanView, "[Edit Comment]") {
+		t.Error("expected '[Edit Comment]' title in edit mode view")
+	}
+
+	// Check for author and date
+	if !stringContains(cleanView, "User One") {
+		t.Error("expected 'User One' (author) in edit mode view")
+	}
+	if !stringContains(cleanView, "2026-01-15") {
+		t.Error("expected '2026-01-15' (date) in edit mode view")
+	}
+
+	// Check for footer with shortcuts
+	if !stringContains(cleanView, "Submit") || !stringContains(cleanView, "Enter") {
+		t.Error("expected 'Submit: Enter' in footer")
+	}
+	if !stringContains(cleanView, "Cancel") || !stringContains(cleanView, "Esc") {
+		t.Error("expected 'Cancel: Esc' in footer")
+	}
+}

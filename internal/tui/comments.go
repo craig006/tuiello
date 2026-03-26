@@ -158,7 +158,18 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 				cl.textInput.SetValue("")
 				cl.textInput.Focus()
 				return cl, textinput.Blink
-			// e, d will be added in later tasks
+			case msg.String() == "e":
+				if cl.selectedIdx < len(cl.comments) {
+					comment := cl.comments[cl.selectedIdx]
+					if comment.Editable {
+						cl.mode = CommentModeEdit
+						cl.editingIdx = cl.selectedIdx
+						cl.textInput.SetValue(comment.Body)
+						cl.textInput.Focus()
+						return cl, textinput.Blink
+					}
+				}
+			// d will be added in later tasks
 			}
 		}
 	}
@@ -228,10 +239,30 @@ func (cl CommentsList) renderViewMode() string {
 	return cl.viewport.View() + "\n" + footer
 }
 
-// renderEditMode is a placeholder for edit mode rendering (Task 8)
+// renderEditMode renders the edit comment input interface
 func (cl CommentsList) renderEditMode() string {
-	// TODO: Implement in Task 8
-	return ""
+	if cl.editingIdx < 0 || cl.editingIdx >= len(cl.comments) {
+		return ""
+	}
+
+	comment := cl.comments[cl.editingIdx]
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Render("[Edit Comment]")
+
+	authorStr := comment.Author.FullName + " (" + comment.Date.Format("2006-01-02") + ")"
+
+	inputBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1).
+		Width(cl.width - 2).
+		Render(cl.textInput.View())
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render("Submit: Enter | Cancel: Esc | Newline: Shift+Enter")
+
+	return title + "\n" + authorStr + "\n" + inputBox + "\n" + footer
 }
 
 // SetComments updates the comments list and resets selection.
