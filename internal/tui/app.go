@@ -104,6 +104,8 @@ type App struct {
 	showLabelModal  bool
 	memberModal     MultiSelectModel
 	labelModal      MultiSelectModel
+
+	boardHasFocus bool  // true = board active (blue border), false = detail active
 }
 
 func NewApp(client *trello.Client, cfg config.Config) App {
@@ -119,6 +121,7 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		loading:        true,
 		commandPalette: palette,
 		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme), cfg.GUI.Padding),
+		boardHasFocus: true,  // Board starts with focus
 	}
 	a.viewBar = NewViewBar(cfg.Views)
 	si := textinput.New()

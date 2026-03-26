@@ -12,6 +12,16 @@ import (
 	"github.com/craig006/tuiello/internal/trello"
 )
 
+func TestAppBoardHasFocusInitialized(t *testing.T) {
+	cfg := config.DefaultConfig()
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+
+	if !app.boardHasFocus {
+		t.Error("expected boardHasFocus to be true after NewApp initialization")
+	}
+}
+
 func TestAppInitNoBoard(t *testing.T) {
 	cfg := config.DefaultConfig()
 	client := trello.NewClient("key", "token")
