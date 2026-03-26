@@ -1439,3 +1439,304 @@ func TestAutocompleteBackspaceClosesEmpty(t *testing.T) {
 		t.Error("expected autocomplete to be closed when backspace on empty query")
 	}
 }
+
+func TestCommentCreatedMessage(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Create a test comment
+	newComment := trello.Comment{
+		ID:   "new-comment-1",
+		Body: "This is a new comment",
+		Author: trello.Member{
+			ID:       "user1",
+			FullName: "John Doe",
+			Username: "johndoe",
+		},
+		Date:     time.Now(),
+		Editable: true,
+	}
+
+	// Send CommentCreatedMsg
+	msg := CommentCreatedMsg{Comment: newComment}
+	cl, _ = cl.Update(msg)
+
+	// Verify comment was added
+	if len(cl.comments) != 1 {
+		t.Errorf("expected 1 comment after creation, got %d", len(cl.comments))
+	}
+
+	if cl.comments[0].ID != "new-comment-1" {
+		t.Errorf("expected comment ID 'new-comment-1', got %q", cl.comments[0].ID)
+	}
+
+	if cl.comments[0].Body != "This is a new comment" {
+		t.Errorf("expected body 'This is a new comment', got %q", cl.comments[0].Body)
+	}
+}
+
+func TestCommentCreatedReturnsToView(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Put component in Create mode
+	cl.mode = CommentModeCreate
+	cl.textInput.SetValue("Test comment")
+
+	newComment := trello.Comment{
+		ID:       "comment-1",
+		Body:     "Test comment",
+		Author:   trello.Member{ID: "u1", FullName: "User"},
+		Date:     time.Now(),
+		Editable: true,
+	}
+
+	msg := CommentCreatedMsg{Comment: newComment}
+	cl, _ = cl.Update(msg)
+
+	// Verify mode changed back to View
+	if cl.mode != CommentModeView {
+		t.Errorf("expected mode CommentModeView after creation, got %d", cl.mode)
+	}
+}
+
+func TestCommentCreatedClearsInput(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Put component in Create mode with text
+	cl.mode = CommentModeCreate
+	cl.textInput.SetValue("Some input text")
+
+	newComment := trello.Comment{
+		ID:       "comment-1",
+		Body:     "Some input text",
+		Author:   trello.Member{ID: "u1", FullName: "User"},
+		Date:     time.Now(),
+		Editable: true,
+	}
+
+	msg := CommentCreatedMsg{Comment: newComment}
+	cl, _ = cl.Update(msg)
+
+	// Verify input was cleared
+	if cl.textInput.Value() != "" {
+		t.Errorf("expected empty input after creation, got %q", cl.textInput.Value())
+	}
+}
+
+func TestCommentUpdatedMessage(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up initial comments
+	initialComments := []trello.Comment{
+		{
+			ID:       "comment-1",
+			Body:     "Old text",
+			Author:   trello.Member{ID: "u1", FullName: "User"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+		{
+			ID:       "comment-2",
+			Body:     "Other comment",
+			Author:   trello.Member{ID: "u2", FullName: "User Two"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+	}
+	cl.SetComments(initialComments)
+
+	// Update first comment (selectedIdx = 0, so editingIdx should be set to 0)
+	cl.mode = CommentModeEdit
+	cl.editingIdx = 0
+	cl.textInput.SetValue("Updated text")
+
+	updatedComment := trello.Comment{
+		ID:       "comment-1",
+		Body:     "Updated text",
+		Author:   trello.Member{ID: "u1", FullName: "User"},
+		Date:     time.Now(),
+		Editable: true,
+	}
+
+	msg := CommentUpdatedMsg{Comment: updatedComment}
+	cl, _ = cl.Update(msg)
+
+	// Verify comment was updated
+	if cl.comments[0].Body != "Updated text" {
+		t.Errorf("expected updated body 'Updated text', got %q", cl.comments[0].Body)
+	}
+
+	// Verify other comment wasn't affected
+	if cl.comments[1].Body != "Other comment" {
+		t.Errorf("expected unchanged body 'Other comment', got %q", cl.comments[1].Body)
+	}
+}
+
+func TestCommentUpdatedReturnsToView(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up initial comment
+	initialComments := []trello.Comment{
+		{
+			ID:       "comment-1",
+			Body:     "Old text",
+			Author:   trello.Member{ID: "u1", FullName: "User"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+	}
+	cl.SetComments(initialComments)
+
+	// Put in Edit mode
+	cl.mode = CommentModeEdit
+	cl.editingIdx = 0
+	cl.textInput.SetValue("Updated text")
+
+	updatedComment := trello.Comment{
+		ID:       "comment-1",
+		Body:     "Updated text",
+		Author:   trello.Member{ID: "u1", FullName: "User"},
+		Date:     time.Now(),
+		Editable: true,
+	}
+
+	msg := CommentUpdatedMsg{Comment: updatedComment}
+	cl, _ = cl.Update(msg)
+
+	// Verify mode changed back to View
+	if cl.mode != CommentModeView {
+		t.Errorf("expected mode CommentModeView after update, got %d", cl.mode)
+	}
+}
+
+func TestCommentUpdatedClearsInputAndResetsIdx(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up initial comment
+	initialComments := []trello.Comment{
+		{
+			ID:       "comment-1",
+			Body:     "Old text",
+			Author:   trello.Member{ID: "u1", FullName: "User"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+	}
+	cl.SetComments(initialComments)
+
+	// Put in Edit mode
+	cl.mode = CommentModeEdit
+	cl.editingIdx = 0
+	cl.textInput.SetValue("Updated text")
+
+	updatedComment := trello.Comment{
+		ID:       "comment-1",
+		Body:     "Updated text",
+		Author:   trello.Member{ID: "u1", FullName: "User"},
+		Date:     time.Now(),
+		Editable: true,
+	}
+
+	msg := CommentUpdatedMsg{Comment: updatedComment}
+	cl, _ = cl.Update(msg)
+
+	// Verify input was cleared
+	if cl.textInput.Value() != "" {
+		t.Errorf("expected empty input after update, got %q", cl.textInput.Value())
+	}
+
+	// Verify editingIdx was reset
+	if cl.editingIdx != -1 {
+		t.Errorf("expected editingIdx -1 after update, got %d", cl.editingIdx)
+	}
+}
+
+func TestCommentDeletedMessage(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up initial comments
+	initialComments := []trello.Comment{
+		{
+			ID:       "comment-1",
+			Body:     "First comment",
+			Author:   trello.Member{ID: "u1", FullName: "User One"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+		{
+			ID:       "comment-2",
+			Body:     "Second comment",
+			Author:   trello.Member{ID: "u2", FullName: "User Two"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+		{
+			ID:       "comment-3",
+			Body:     "Third comment",
+			Author:   trello.Member{ID: "u3", FullName: "User Three"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+	}
+	cl.SetComments(initialComments)
+
+	// Select and delete second comment
+	cl.selectedIdx = 1
+
+	msg := CommentDeletedMsg{CommentID: "comment-2"}
+	cl, _ = cl.Update(msg)
+
+	// Verify comment was removed
+	if len(cl.comments) != 2 {
+		t.Errorf("expected 2 comments after deletion, got %d", len(cl.comments))
+	}
+
+	// Verify correct comment was deleted
+	if cl.comments[0].ID != "comment-1" {
+		t.Errorf("expected first comment to be 'comment-1', got %q", cl.comments[0].ID)
+	}
+	if cl.comments[1].ID != "comment-3" {
+		t.Errorf("expected second comment to be 'comment-3', got %q", cl.comments[1].ID)
+	}
+}
+
+func TestCommentDeletedAdjustsSelection(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up initial comments
+	initialComments := []trello.Comment{
+		{
+			ID:       "comment-1",
+			Body:     "First comment",
+			Author:   trello.Member{ID: "u1", FullName: "User One"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+		{
+			ID:       "comment-2",
+			Body:     "Second comment",
+			Author:   trello.Member{ID: "u2", FullName: "User Two"},
+			Date:     time.Now(),
+			Editable: true,
+		},
+	}
+	cl.SetComments(initialComments)
+
+	// Select and delete the last comment
+	cl.selectedIdx = 1
+
+	msg := CommentDeletedMsg{CommentID: "comment-2"}
+	cl, _ = cl.Update(msg)
+
+	// Verify selectedIdx was adjusted
+	if cl.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx 0 after deleting last comment, got %d", cl.selectedIdx)
+	}
+}

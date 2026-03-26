@@ -114,6 +114,35 @@ func NewCommentsList(theme Theme, keyMap KeyMap) CommentsList {
 
 // Update handles incoming messages and updates the component state.
 func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
+	// Handle comment operation responses FIRST
+	switch msg := msg.(type) {
+	case CommentCreatedMsg:
+		cl.comments = append(cl.comments, msg.Comment)
+		cl.mode = CommentModeView
+		cl.textInput.SetValue("")
+		return cl, nil
+
+	case CommentUpdatedMsg:
+		if cl.editingIdx >= 0 && cl.editingIdx < len(cl.comments) {
+			cl.comments[cl.editingIdx] = msg.Comment
+		}
+		cl.mode = CommentModeView
+		cl.textInput.SetValue("")
+		cl.editingIdx = -1
+		return cl, nil
+
+	case CommentDeletedMsg:
+		// Remove comment from list
+		if cl.selectedIdx < len(cl.comments) {
+			cl.comments = append(cl.comments[:cl.selectedIdx], cl.comments[cl.selectedIdx+1:]...)
+		}
+		if cl.selectedIdx >= len(cl.comments) && cl.selectedIdx > 0 {
+			cl.selectedIdx--
+		}
+		return cl, nil
+	}
+
+	// Handle key messages
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if !cl.focused {
