@@ -928,3 +928,249 @@ func TestDeleteCommentShowsConfirmation(t *testing.T) {
 		t.Error("expected comment body in confirmation view")
 	}
 }
+
+// Task 10: Autocomplete tests
+func TestAutocompleteActivatesOnAt(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bob"},
+	}
+	cl.SetMembers(members)
+
+	// Simulate @ character
+	initialTextLen := len(cl.textInput.Value())
+	cl.autocomplete.Active = true
+	cl.autocomplete.Query = ""
+	cl.autocomplete.SelectedIdx = 0
+	cl.autocomplete.Pos = initialTextLen
+	cl.autocomplete.Matches = cl.allMembers
+
+	if !cl.autocomplete.Active {
+		t.Error("expected autocomplete to be active after @ character")
+	}
+
+	if cl.autocomplete.Query != "" {
+		t.Errorf("expected empty query at start, got %q", cl.autocomplete.Query)
+	}
+
+	if cl.autocomplete.SelectedIdx != 0 {
+		t.Errorf("expected SelectedIdx 0, got %d", cl.autocomplete.SelectedIdx)
+	}
+
+	if len(cl.autocomplete.Matches) != 2 {
+		t.Errorf("expected 2 matches (all members), got %d", len(cl.autocomplete.Matches))
+	}
+}
+
+func TestAutocompleteFilterByName(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bob"},
+		{ID: "member3", FullName: "Alice Johnson", Username: "alice2"},
+	}
+	cl.SetMembers(members)
+
+	// Filter by "Alice"
+	cl.filterMembers("Alice")
+
+	if len(cl.autocomplete.Matches) != 2 {
+		t.Errorf("expected 2 members matching 'Alice', got %d", len(cl.autocomplete.Matches))
+	}
+
+	// Verify both Alices are in matches
+	foundAliceSmith := false
+	foundAliceJohnson := false
+	for _, member := range cl.autocomplete.Matches {
+		if member.FullName == "Alice Smith" {
+			foundAliceSmith = true
+		}
+		if member.FullName == "Alice Johnson" {
+			foundAliceJohnson = true
+		}
+	}
+
+	if !foundAliceSmith {
+		t.Error("expected 'Alice Smith' in filtered results")
+	}
+	if !foundAliceJohnson {
+		t.Error("expected 'Alice Johnson' in filtered results")
+	}
+}
+
+func TestAutocompleteFilterByUsername(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bobby"},
+		{ID: "member3", FullName: "Charlie Brown", Username: "charlie"},
+	}
+	cl.SetMembers(members)
+
+	// Filter by "bob" (should match both "bobby" and "Bob")
+	cl.filterMembers("bob")
+
+	if len(cl.autocomplete.Matches) != 1 {
+		t.Errorf("expected 1 member matching 'bob', got %d", len(cl.autocomplete.Matches))
+	}
+
+	if cl.autocomplete.Matches[0].Username != "bobby" {
+		t.Errorf("expected username 'bobby', got %q", cl.autocomplete.Matches[0].Username)
+	}
+}
+
+func TestAutocompleteFilterCaseInsensitive(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bobby"},
+	}
+	cl.SetMembers(members)
+
+	// Filter with different cases
+	cl.filterMembers("ALICE")
+
+	if len(cl.autocomplete.Matches) != 1 {
+		t.Errorf("expected 1 member matching 'ALICE', got %d", len(cl.autocomplete.Matches))
+	}
+
+	if cl.autocomplete.Matches[0].FullName != "Alice Smith" {
+		t.Errorf("expected 'Alice Smith', got %q", cl.autocomplete.Matches[0].FullName)
+	}
+
+	// Filter with mixed case
+	cl.filterMembers("BoB")
+
+	if len(cl.autocomplete.Matches) != 1 {
+		t.Errorf("expected 1 member matching 'BoB', got %d", len(cl.autocomplete.Matches))
+	}
+
+	if cl.autocomplete.Matches[0].FullName != "Bob Jones" {
+		t.Errorf("expected 'Bob Jones', got %q", cl.autocomplete.Matches[0].FullName)
+	}
+}
+
+func TestAutocompleteStartsWithAllMembers(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bobby"},
+		{ID: "member3", FullName: "Charlie Brown", Username: "charlie"},
+	}
+	cl.SetMembers(members)
+
+	// Simulate @ character (starts with all members)
+	cl.autocomplete.Active = true
+	cl.autocomplete.Query = ""
+	cl.autocomplete.Matches = cl.allMembers
+
+	if len(cl.autocomplete.Matches) != 3 {
+		t.Errorf("expected all 3 members when @ is first typed, got %d", len(cl.autocomplete.Matches))
+	}
+}
+
+func TestRenderAutocomplete(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetSize(80, 20)
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bobby"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete
+	cl.autocomplete.Active = true
+	cl.autocomplete.Matches = cl.allMembers
+	cl.autocomplete.SelectedIdx = 0
+	cl.autocomplete.Query = ""
+
+	view := cl.renderAutocomplete()
+
+	// Should not be empty
+	if view == "" {
+		t.Error("expected autocomplete view to be non-empty")
+	}
+
+	// Check for Members header
+	if !stringContains(view, "Members:") {
+		t.Error("expected 'Members:' header in autocomplete view")
+	}
+
+	// Check for member names
+	cleanView := stripANSI(view)
+	if !stringContains(cleanView, "Alice Smith") {
+		t.Error("expected 'Alice Smith' in autocomplete view")
+	}
+	if !stringContains(cleanView, "Bob Jones") {
+		t.Error("expected 'Bob Jones' in autocomplete view")
+	}
+
+	// Check for usernames
+	if !stringContains(cleanView, "@alice") {
+		t.Error("expected '@alice' in autocomplete view")
+	}
+	if !stringContains(cleanView, "@bobby") {
+		t.Error("expected '@bobby' in autocomplete view")
+	}
+}
+
+func TestRenderAutocompleteEmpty(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetSize(80, 20)
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete but with no matches
+	cl.autocomplete.Active = true
+	cl.autocomplete.Matches = []trello.Member{}
+	cl.autocomplete.Query = "xyz"
+
+	view := cl.renderAutocomplete()
+
+	// Should be empty
+	if view != "" {
+		t.Errorf("expected empty view when no matches, got %q", view)
+	}
+}
+
+func TestRenderAutocompleteInactive(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetSize(80, 20)
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+	}
+	cl.SetMembers(members)
+
+	// Autocomplete inactive
+	cl.autocomplete.Active = false
+	cl.autocomplete.Matches = cl.allMembers
+
+	view := cl.renderAutocomplete()
+
+	// Should be empty
+	if view != "" {
+		t.Errorf("expected empty view when autocomplete inactive, got %q", view)
+	}
+}

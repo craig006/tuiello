@@ -139,6 +139,17 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 
 		// Handle input in Create/Edit modes
 		if cl.mode == CommentModeCreate || cl.mode == CommentModeEdit {
+			// First check if this is @ character (before normal text input)
+			if msg.String() == "@" {
+				cl.autocomplete.Active = true
+				cl.autocomplete.Query = ""
+				cl.autocomplete.SelectedIdx = 0
+				cl.autocomplete.Pos = len(cl.textInput.Value())
+				cl.autocomplete.Matches = cl.allMembers // Start with all members
+				return cl, nil
+			}
+
+			// Then handle other special keys
 			switch msg.String() {
 			case "enter":
 				text := cl.textInput.Value()
@@ -150,13 +161,29 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 				cl.mode = CommentModeView
 				cl.textInput.SetValue("")
 				cl.textInput.Blur()
+				cl.autocomplete.Active = false
 				return cl, nil
 			}
 
-			// Delegate to textInput for normal typing
-			var cmd tea.Cmd
-			cl.textInput, cmd = cl.textInput.Update(msg)
-			return cl, cmd
+			// Handle typing after @ to filter
+			if cl.autocomplete.Active {
+				// Check if it's a rune character (not a special key like escape, enter, etc.)
+				keyStr := msg.String()
+				if len(keyStr) > 0 && keyStr != "backspace" && keyStr != "delete" && keyStr != "esc" && keyStr != "enter" {
+					// Add to query and filter
+					cl.autocomplete.Query += keyStr
+					cl.filterMembers(cl.autocomplete.Query)
+					return cl, nil
+				}
+			}
+
+			// Normal text input when not in autocomplete
+			if !cl.autocomplete.Active {
+				var cmd tea.Cmd
+				cl.textInput, cmd = cl.textInput.Update(msg)
+				return cl, cmd
+			}
+			return cl, nil
 		}
 
 		// Only handle navigation keys in View mode
@@ -302,6 +329,11 @@ func (cl CommentsList) renderEditMode() string {
 		Foreground(lipgloss.Color("8")).
 		Render("Submit: Enter | Cancel: Esc | Newline: Shift+Enter")
 
+	// Include autocomplete if active
+	autocompleteView := cl.renderAutocomplete()
+	if autocompleteView != "" {
+		return title + "\n" + authorStr + "\n" + inputBox + "\n" + autocompleteView + "\n" + footer
+	}
 	return title + "\n" + authorStr + "\n" + inputBox + "\n" + footer
 }
 
@@ -316,6 +348,25 @@ func (cl *CommentsList) SetComments(comments []trello.Comment) {
 // SetMembers updates the available members for autocomplete.
 func (cl *CommentsList) SetMembers(members []trello.Member) {
 	cl.allMembers = members
+}
+
+// filterMembers filters the available members based on a query string.
+// Matches against FullName and Username (case-insensitive).
+func (cl *CommentsList) filterMembers(query string) {
+	cl.autocomplete.Query = query
+	cl.autocomplete.Matches = []trello.Member{}
+
+	query = strings.ToLower(query)
+	for _, member := range cl.allMembers {
+		if strings.Contains(strings.ToLower(member.FullName), query) ||
+			strings.Contains(strings.ToLower(member.Username), query) {
+			cl.autocomplete.Matches = append(cl.autocomplete.Matches, member)
+		}
+	}
+
+	if len(cl.autocomplete.Matches) > 0 {
+		cl.autocomplete.SelectedIdx = 0
+	}
 }
 
 // SetSize updates the width and height of the component and viewport.
@@ -357,6 +408,35 @@ func (cl CommentsList) deleteComment(commentID string) tea.Cmd {
 	}
 }
 
+// renderAutocomplete renders the @ mention autocomplete popup showing matching members.
+func (cl CommentsList) renderAutocomplete() string {
+	if !cl.autocomplete.Active || len(cl.autocomplete.Matches) == 0 {
+		return ""
+	}
+
+	var lines []string
+	lines = append(lines, lipgloss.NewStyle().Bold(true).Render("Members:"))
+
+	for i, member := range cl.autocomplete.Matches {
+		indicator := " "
+		if i == cl.autocomplete.SelectedIdx {
+			indicator = ">"
+		}
+
+		line := lipgloss.NewStyle().
+			Render(indicator + " " + member.FullName + " (@" + member.Username + ")")
+
+		if i == cl.autocomplete.SelectedIdx {
+			line = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("4")).
+				Render(line)
+		}
+		lines = append(lines, line)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // renderCreateMode renders the create comment input interface
 func (cl CommentsList) renderCreateMode() string {
 	title := lipgloss.NewStyle().
@@ -373,5 +453,10 @@ func (cl CommentsList) renderCreateMode() string {
 		Foreground(lipgloss.Color("8")).
 		Render("Submit: Enter | Cancel: Esc | Newline: Shift+Enter")
 
+	// Include autocomplete if active
+	autocompleteView := cl.renderAutocomplete()
+	if autocompleteView != "" {
+		return title + "\n" + inputBox + "\n" + autocompleteView + "\n" + footer
+	}
 	return title + "\n" + inputBox + "\n" + footer
 }
