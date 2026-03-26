@@ -356,6 +356,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.detail.HandleChecklistsFetchErr(msg)
 		return a, nil
 
+	case CreateCommentRequestMsg:
+		return a, a.createCommentCmd(msg.Text)
+
+	case UpdateCommentRequestMsg:
+		return a, a.updateCommentCmd(msg.CommentID, msg.Text)
+
+	case DeleteCommentRequestMsg:
+		return a, a.deleteCommentCmd(msg.CommentID)
+
+	case CommentOperationErrMsg:
+		a.status = fmt.Sprintf("Failed to %s comment: %v", msg.Operation, msg.Err)
+		return a, nil
+
 	case CurrentUserMsg:
 		a.currentUser = msg.Username
 		// Re-apply active view's filter now that @me can resolve
@@ -1461,4 +1474,45 @@ func (a App) renderHelp() string {
 	}
 	lines += "\n  Press ? or Esc to close"
 	return lines
+}
+
+// selectedCardID returns the ID of the currently selected card
+func (a *App) selectedCardID() string {
+	if card, _, ok := a.board.SelectedCard(); ok {
+		return card.ID
+	}
+	return ""
+}
+
+// createCommentCmd generates a command to create a comment on the selected card
+func (a *App) createCommentCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		comment, err := a.client.CreateComment(a.selectedCardID(), text)
+		if err != nil {
+			return CommentOperationErrMsg{Operation: "create", Err: err}
+		}
+		return CommentCreatedMsg{Comment: comment}
+	}
+}
+
+// updateCommentCmd generates a command to update an existing comment
+func (a *App) updateCommentCmd(commentID, text string) tea.Cmd {
+	return func() tea.Msg {
+		comment, err := a.client.UpdateComment(commentID, text)
+		if err != nil {
+			return CommentOperationErrMsg{Operation: "update", Err: err}
+		}
+		return CommentUpdatedMsg{Comment: comment}
+	}
+}
+
+// deleteCommentCmd generates a command to delete a comment
+func (a *App) deleteCommentCmd(commentID string) tea.Cmd {
+	return func() tea.Msg {
+		err := a.client.DeleteComment(commentID)
+		if err != nil {
+			return CommentOperationErrMsg{Operation: "delete", Err: err}
+		}
+		return CommentDeletedMsg{CommentID: commentID}
+	}
 }

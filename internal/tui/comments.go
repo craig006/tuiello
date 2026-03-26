@@ -45,6 +45,11 @@ type CommentDeletedMsg struct {
 	CommentID string
 }
 
+type CommentOperationErrMsg struct {
+	Operation string // "create", "update", "delete"
+	Err       error
+}
+
 // AutocompleteState tracks the state of @ mention autocomplete
 type AutocompleteState struct {
 	Active      bool

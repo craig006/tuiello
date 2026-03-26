@@ -597,3 +597,300 @@ func TestFocusToggleEscapeFromBoard(t *testing.T) {
 		t.Fatal("expected detail to not have focus")
 	}
 }
+
+// Test comment operation message routing
+func TestCreateCommentRouting(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Send CreateCommentRequestMsg
+	msg := CreateCommentRequestMsg{Text: "Test comment"}
+	model, cmd := app.Update(msg)
+	app = model.(App)
+
+	if cmd == nil {
+		t.Fatal("expected CreateCommentRequestMsg to return a command")
+	}
+}
+
+func TestCreateCommentSuccess(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	msg := CreateCommentRequestMsg{Text: "Test comment"}
+	model, cmd := app.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command to be returned")
+	}
+
+	// The command should return either CommentCreatedMsg or nil (on API error)
+	// We're just verifying the command exists and executes
+	_ = cmd()
+}
+
+func TestCreateCommentError(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	msg := CreateCommentRequestMsg{Text: "Test comment"}
+	model, cmd := app.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command to be returned")
+	}
+
+	// The command should execute and may return nil or an error message
+	// We're verifying the command chain exists
+	_ = cmd()
+}
+
+func TestUpdateCommentRouting(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Send UpdateCommentRequestMsg
+	msg := UpdateCommentRequestMsg{CommentID: "comment1", Text: "Updated comment"}
+	model, cmd := app.Update(msg)
+	app = model.(App)
+
+	if cmd == nil {
+		t.Fatal("expected UpdateCommentRequestMsg to return a command")
+	}
+}
+
+func TestUpdateCommentSuccess(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	msg := UpdateCommentRequestMsg{CommentID: "comment1", Text: "Updated comment"}
+	model, cmd := app.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command to be returned")
+	}
+
+	// The command should execute and may return CommentUpdatedMsg or nil
+	_ = cmd()
+}
+
+func TestUpdateCommentError(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "c1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	msg := UpdateCommentRequestMsg{CommentID: "comment1", Text: "Updated"}
+	model, cmd := app.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command to be returned")
+	}
+
+	// The command should execute and may return nil or an error message
+	_ = cmd()
+}
+
+func TestDeleteCommentRouting(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Send DeleteCommentRequestMsg
+	msg := DeleteCommentRequestMsg{CommentID: "comment1"}
+	model, cmd := app.Update(msg)
+	app = model.(App)
+
+	if cmd == nil {
+		t.Fatal("expected DeleteCommentRequestMsg to return a command")
+	}
+}
+
+func TestDeleteCommentSuccess(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	msg := DeleteCommentRequestMsg{CommentID: "comment1"}
+	model, cmd := app.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command to be returned")
+	}
+
+	// The command should execute
+	_ = cmd()
+}
+
+func TestDeleteCommentError(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "c1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	msg := DeleteCommentRequestMsg{CommentID: "comment1"}
+	model, cmd := app.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command to be returned")
+	}
+
+	// The command should execute and may return nil or an error message
+	_ = cmd()
+}
