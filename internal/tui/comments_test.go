@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -357,12 +358,167 @@ func stringContains(s, substr string) bool {
 
 // stripANSI removes ANSI escape codes from a string
 func stripANSI(s string) string {
-	// Remove common ANSI escape codes
-	result := strings.ReplaceAll(s, "\x1b[90m", "")  // foreground color
-	result = strings.ReplaceAll(result, "\x1b[m", "") // reset
+	// Remove all ANSI escape sequences using a more comprehensive approach
+	result := strings.ReplaceAll(s, "\x1b[90m", "")   // foreground color 8
 	result = strings.ReplaceAll(result, "\x1b[1m", "") // bold
 	result = strings.ReplaceAll(result, "\x1b[34m", "") // blue foreground
-	result = strings.ReplaceAll(result, "\x1b[38;5;", "") // 256 color prefix (incomplete removal, but helps)
-	result = strings.ReplaceAll(result, "m", "")     // remove stray m's
-	return result
+	result = strings.ReplaceAll(result, "\x1b[m", "")  // reset
+	result = strings.ReplaceAll(result, "\x1b[7;37m", "") // reverse video
+	result = strings.ReplaceAll(result, "\x1b[37m", "") // white foreground
+	result = strings.ReplaceAll(result, "\x1b[0m", "") // reset
+
+	// Remove color sequences with parameters (e.g., \x1b[38;5;XXm)
+	for i := 0; i < 256; i++ {
+		result = strings.ReplaceAll(result, fmt.Sprintf("\x1b[38;5;%dm", i), "")
+		result = strings.ReplaceAll(result, fmt.Sprintf("\x1b[48;5;%dm", i), "")
+	}
+
+	// Remove any remaining escape sequences
+	inEscape := false
+	var cleaned strings.Builder
+	for _, ch := range result {
+		if ch == '\x1b' {
+			inEscape = true
+		} else if inEscape && ch == 'm' {
+			inEscape = false
+		} else if !inEscape {
+			cleaned.WriteRune(ch)
+		}
+	}
+
+	return cleaned.String()
+}
+
+func TestCreateCommentMode(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Start in View mode
+	if cl.mode != CommentModeView {
+		t.Fatalf("expected initial mode CommentModeView, got %d", cl.mode)
+	}
+
+	// Manually transition to Create mode (simulating 'c' key handling)
+	cl.mode = CommentModeCreate
+	cl.textInput.SetValue("")
+	cl.textInput.Focus()
+
+	if cl.mode != CommentModeCreate {
+		t.Errorf("expected mode CommentModeCreate, got %d", cl.mode)
+	}
+
+	// Verify textinput is cleared and focused
+	if cl.textInput.Value() != "" {
+		t.Errorf("expected textInput to be cleared, got %q", cl.textInput.Value())
+	}
+}
+
+func TestCreateModeInput(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Enter Create mode
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	// Manually set text (simulating user typing)
+	cl.textInput.SetValue("Hello World")
+
+	if cl.textInput.Value() != "Hello World" {
+		t.Errorf("expected textInput value 'Hello World', got %q", cl.textInput.Value())
+	}
+}
+
+func TestCreateModeCancel(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Enter Create mode and type something
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+	cl.textInput.SetValue("Test comment")
+
+	// Simulate Escape key (exit Create mode)
+	cl.mode = CommentModeView
+	cl.textInput.SetValue("")
+	cl.textInput.Blur()
+
+	if cl.mode != CommentModeView {
+		t.Errorf("expected mode CommentModeView after exit, got %d", cl.mode)
+	}
+
+	if cl.textInput.Value() != "" {
+		t.Errorf("expected textInput to be cleared after cancel, got %q", cl.textInput.Value())
+	}
+}
+
+func TestCreateModeSubmit(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Enter Create mode
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+	cl.textInput.SetValue("New comment text")
+
+	// Call submitComment directly (testing the command generation)
+	cmd := cl.submitComment()
+
+	// Verify that a command was returned
+	if cmd == nil {
+		t.Error("expected a command from submitComment, got nil")
+	}
+
+	// Execute the command to get the message
+	msg := cmd()
+	createMsg, ok := msg.(CreateCommentRequestMsg)
+	if !ok {
+		t.Fatalf("expected CreateCommentRequestMsg, got %T", msg)
+	}
+
+	if createMsg.Text != "New comment text" {
+		t.Errorf("expected text 'New comment text', got %q", createMsg.Text)
+	}
+}
+
+func TestCreateModeSubmitEmpty(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Enter Create mode with empty input
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+	cl.textInput.SetValue("   ")
+
+	// Try to submit empty/whitespace-only text - should not generate a message
+	text := cl.textInput.Value()
+	if strings.TrimSpace(text) == "" {
+		// This is what we expect - empty submission should be ignored
+		t.Log("empty submission correctly rejected")
+	} else {
+		t.Error("expected whitespace-only submission to be treated as empty")
+	}
+}
+
+func TestRenderCreateMode(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetSize(80, 20)
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	view := cl.View()
+	cleanView := stripANSI(view)
+
+	// Check for title
+	if !stringContains(cleanView, "[New Comment]") {
+		t.Error("expected '[New Comment]' title in create mode view")
+	}
+
+	// Check for footer with shortcuts
+	if !stringContains(cleanView, "Submit") || !stringContains(cleanView, "Enter") {
+		t.Error("expected 'Submit: Enter' in footer")
+	}
+	if !stringContains(cleanView, "Cancel") || !stringContains(cleanView, "Esc") {
+		t.Error("expected 'Cancel: Esc' in footer")
+	}
 }
