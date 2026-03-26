@@ -128,3 +128,110 @@ func TestDetailStaleResponseIgnored(t *testing.T) {
 		t.Error("expected comments to contain the fresh comment")
 	}
 }
+
+func TestDetailModelInitializesCommentsList(t *testing.T) {
+	d := newTestDetail()
+	if d.commentsList == nil {
+		t.Error("expected CommentsList to be initialized in NewDetailModel")
+	}
+}
+
+func TestDetailModelDelegatesCommentMessages(t *testing.T) {
+	d := newTestDetail()
+	d.open = true
+	d.focused = true
+	d.tab = tabComments
+	d.SetCard(trello.Card{ID: "card1"})
+
+	// Create a comment
+	testComment := trello.Comment{ID: "c1", Body: "Test comment"}
+
+	// Simulate delegation by sending a message
+	msg := CommentCreatedMsg{Comment: testComment}
+	d2, _ := d.Update(msg)
+
+	// After Update, d2.commentsList should have received the message
+	// We can verify by checking if the comment was added to commentsList
+	if len(d2.commentsList.comments) == 0 {
+		t.Error("expected CommentsList to receive and handle CommentCreatedMsg")
+	}
+}
+
+func TestDetailModelSetsFocusOnCommentsList(t *testing.T) {
+	d := newTestDetail()
+	d.SetCard(trello.Card{ID: "card1"})
+
+	// Set focus on Comments tab
+	d.tab = tabComments
+	d.SetFocus(true)
+
+	if !d.commentsList.focused {
+		t.Error("expected CommentsList to be focused when Comments tab is active and detail is focused")
+	}
+
+	// Defocus
+	d.SetFocus(false)
+	if d.commentsList.focused {
+		t.Error("expected CommentsList to be unfocused when detail is defocused")
+	}
+
+	// Set focus on different tab
+	d.SetFocus(true)
+	d.tab = tabOverview
+	d.SetFocus(true)
+	if d.commentsList.focused {
+		t.Error("expected CommentsList to be unfocused when Comments tab is not active")
+	}
+}
+
+func TestDetailModelRendersCommentsList(t *testing.T) {
+	d := newTestDetail()
+	d.open = true
+	d.focused = true
+	d.tab = tabComments
+	d.SetSize(60, 30)
+	d.SetCard(trello.Card{ID: "card1"})
+
+	// Set some comments in CommentsList
+	d.commentsList.SetComments([]trello.Comment{
+		{ID: "c1", Body: "First comment", Author: trello.Member{FullName: "Alice"}},
+	})
+
+	view := d.View()
+	if !strings.Contains(view, "Comments") {
+		t.Error("expected view to contain 'Comments' tab label")
+	}
+	// The content should come from CommentsList rendering
+	if !strings.Contains(view, "Alice") && !strings.Contains(view, "No comments") {
+		t.Error("expected view to contain comments content from CommentsList")
+	}
+}
+
+func TestDetailModelCommentsFocusOnlyWhenTabActive(t *testing.T) {
+	d := newTestDetail()
+	d.SetCard(trello.Card{ID: "card1"})
+
+	// Initially on Overview tab
+	d.tab = tabOverview
+	d.SetFocus(true)
+
+	if d.commentsList.focused {
+		t.Error("expected CommentsList to not be focused when on Overview tab")
+	}
+
+	// Switch to Comments tab
+	d.NextTab() // Now on tabComments (1)
+	d.SetFocus(true)
+
+	if !d.commentsList.focused {
+		t.Error("expected CommentsList to be focused when on Comments tab")
+	}
+
+	// Switch to Checklist tab
+	d.NextTab() // Now on tabChecklists (2)
+	d.SetFocus(true)
+
+	if d.commentsList.focused {
+		t.Error("expected CommentsList to not be focused when on Checklist tab")
+	}
+}

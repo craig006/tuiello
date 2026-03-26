@@ -62,21 +62,24 @@ type DetailModel struct {
 	commentsErr    string
 	checklistsErr  string
 
-	viewport viewport.Model
-	width    int
-	height   int
-	padding  int
-	keyMap   KeyMap
-	theme    Theme
+	viewport      viewport.Model
+	commentsList  *CommentsList
+	width         int
+	height        int
+	padding       int
+	keyMap        KeyMap
+	theme         Theme
 }
 
 func NewDetailModel(km KeyMap, theme Theme, padding int) DetailModel {
 	vp := viewport.New()
+	cl := NewCommentsList(theme, km)
 	return DetailModel{
-		keyMap:   km,
-		theme:    theme,
-		padding:  padding,
-		viewport: vp,
+		keyMap:       km,
+		theme:        theme,
+		padding:      padding,
+		viewport:     vp,
+		commentsList: &cl,
 	}
 }
 
@@ -96,10 +99,10 @@ func (d *DetailModel) PrevTab() {
 // When defocusing, any active inputs will be blurred (to be implemented in future tasks).
 func (d *DetailModel) SetFocus(focused bool) {
 	d.focused = focused
-	// If defocusing, blur any active input
-	if !focused {
-		// Will be implemented more fully in later tasks
-		// For now, just set the flag
+
+	// Set focus on CommentsList if Comments tab is active
+	if d.commentsList != nil {
+		d.commentsList.SetFocus(focused && d.tab == tabComments)
 	}
 }
 
@@ -116,6 +119,11 @@ func (d *DetailModel) SetCard(card trello.Card) {
 	d.checklistsLoading = false
 	d.commentsErr = ""
 	d.checklistsErr = ""
+
+	// Clear CommentsList when card changes
+	if d.commentsList != nil {
+		d.commentsList.SetComments([]trello.Comment{})
+	}
 }
 
 func (d *DetailModel) SetSize(width, height int) {
@@ -132,6 +140,11 @@ func (d *DetailModel) SetSize(width, height int) {
 	}
 	d.viewport.SetWidth(vpWidth)
 	d.viewport.SetHeight(vpHeight)
+
+	// Also set size on CommentsList
+	if d.commentsList != nil {
+		d.commentsList.SetSize(vpWidth, vpHeight)
+	}
 }
 
 func (d *DetailModel) HandleCommentsMsg(msg CardCommentsMsg) {
@@ -142,6 +155,11 @@ func (d *DetailModel) HandleCommentsMsg(msg CardCommentsMsg) {
 	d.commentsLoaded = true
 	d.commentsLoading = false
 	d.commentsErr = ""
+
+	// Sync comments to CommentsList
+	if d.commentsList != nil {
+		d.commentsList.SetComments(msg.Comments)
+	}
 }
 
 func (d *DetailModel) HandleCommentsFetchErr(msg CardCommentsFetchErrMsg) {
@@ -203,6 +221,18 @@ func (d *DetailModel) MarkLoading() {
 
 // Update handles viewport scrolling messages.
 func (d DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
+	// If Comments tab is active and detail is focused, delegate to CommentsList
+	if d.open && d.focused && d.tab == tabComments && d.commentsList != nil {
+		*d.commentsList, msg = d.commentsList.Update(msg)
+		// Return early if it was a message CommentsList handled
+		// Otherwise fall through to normal viewport handling
+		switch msg.(type) {
+		case CreateCommentRequestMsg, UpdateCommentRequestMsg, DeleteCommentRequestMsg:
+			// CommentsList has handled these - return them as commands to parent
+			return d, func() tea.Msg { return msg }
+		}
+	}
+
 	var cmd tea.Cmd
 	d.viewport, cmd = d.viewport.Update(msg)
 	return d, cmd
@@ -228,10 +258,10 @@ func (d DetailModel) View() string {
 		case tabOverview:
 			content = d.renderOverview(contentWidth)
 		case tabComments:
-			if d.commentsErr != "" {
-				content = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(1)).Render(d.commentsErr)
+			if d.commentsList != nil {
+				content = d.renderCommentsList()
 			} else {
-				content = d.renderComments(contentWidth)
+				content = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Loading comments...")
 			}
 		case tabChecklists:
 			if d.checklistsErr != "" {
@@ -421,6 +451,13 @@ func (d DetailModel) renderChecklists(width int) string {
 	}
 
 	return strings.Join(sections, "\n")
+}
+
+func (d DetailModel) renderCommentsList() string {
+	if d.commentsList == nil {
+		return lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Render("Loading comments...")
+	}
+	return d.commentsList.View()
 }
 
 // wordWrap wraps text to the given width.
