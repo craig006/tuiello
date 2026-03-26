@@ -79,11 +79,13 @@ type BoardKeys struct {
 }
 
 type DetailKeys struct {
-	Toggle     string `mapstructure:"toggle"`
-	TabPrev    string `mapstructure:"tabPrev"`
-	TabNext    string `mapstructure:"tabNext"`
-	ScrollDown string `mapstructure:"scrollDown"`
-	ScrollUp   string `mapstructure:"scrollUp"`
+	Toggle      string `mapstructure:"toggle"`
+	TabPrev     string `mapstructure:"tabPrev"`
+	TabNext     string `mapstructure:"tabNext"`
+	ScrollDown  string `mapstructure:"scrollDown"`
+	ScrollUp    string `mapstructure:"scrollUp"`
+	FocusDetail string `mapstructure:"focusDetail"`
+	FocusBoard  string `mapstructure:"focusBoard"`
 }
 
 type CustomCommandConfig struct {
@@ -157,11 +159,13 @@ func DefaultConfig() Config {
 				CustomCommand: "x",
 			},
 			Detail: DetailKeys{
-				Toggle:     "d",
-				TabPrev:    "[",
-				TabNext:    "]",
-				ScrollDown: "ctrl+j",
-				ScrollUp:   "ctrl+k",
+				Toggle:      "d",
+				TabPrev:     "[",
+				TabNext:     "]",
+				ScrollDown:  "ctrl+j",
+				ScrollUp:    "ctrl+k",
+				FocusDetail: "enter",
+				FocusBoard:  "esc",
 			},
 			Filter: FilterKeys{
 				Focus:   "/",

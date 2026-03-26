@@ -13,6 +13,7 @@ type KeyMap struct {
 	Enter, CustomCommand                                  key.Binding
 	DetailToggle, DetailTabPrev, DetailTabNext            key.Binding
 	DetailScrollDown, DetailScrollUp                      key.Binding
+	FocusDetail, FocusBoard                               key.Binding
 	FilterFocus, FilterMembers, FilterLabels              key.Binding
 	ViewNext, ViewPrev                                    key.Binding
 }
@@ -39,6 +40,8 @@ func NewKeyMap(cfg config.KeybindingConfig) KeyMap {
 		DetailTabNext:    key.NewBinding(key.WithKeys(cfg.Detail.TabNext), key.WithHelp(cfg.Detail.TabNext, "next tab")),
 		DetailScrollDown: key.NewBinding(key.WithKeys(cfg.Detail.ScrollDown), key.WithHelp(cfg.Detail.ScrollDown, "scroll down")),
 		DetailScrollUp:   key.NewBinding(key.WithKeys(cfg.Detail.ScrollUp), key.WithHelp(cfg.Detail.ScrollUp, "scroll up")),
+		FocusDetail:      key.NewBinding(key.WithKeys(cfg.Detail.FocusDetail), key.WithHelp(cfg.Detail.FocusDetail, "focus detail panel")),
+		FocusBoard:       key.NewBinding(key.WithKeys(cfg.Detail.FocusBoard), key.WithHelp(cfg.Detail.FocusBoard, "focus board")),
 		FilterFocus:      key.NewBinding(key.WithKeys(cfg.Filter.Focus), key.WithHelp(cfg.Filter.Focus, "search")),
 		FilterMembers:    key.NewBinding(key.WithKeys(cfg.Filter.Members), key.WithHelp(cfg.Filter.Members, "filter members")),
 		FilterLabels:     key.NewBinding(key.WithKeys(cfg.Filter.Labels), key.WithHelp(cfg.Filter.Labels, "filter labels")),

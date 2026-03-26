@@ -23,6 +23,12 @@ func TestDefaultKeyMap(t *testing.T) {
 	if km.CopyCardURL.Keys()[0] != "u" {
 		t.Errorf("expected copyCardURL 'u', got %q", km.CopyCardURL.Keys()[0])
 	}
+	if km.FocusDetail.Keys()[0] != "enter" {
+		t.Errorf("expected focusDetail key 'enter', got %q", km.FocusDetail.Keys()[0])
+	}
+	if km.FocusBoard.Keys()[0] != "esc" {
+		t.Errorf("expected focusBoard key 'esc', got %q", km.FocusBoard.Keys()[0])
+	}
 }
 
 func TestCustomKeyMap(t *testing.T) {
@@ -39,5 +45,30 @@ func TestCustomKeyMap(t *testing.T) {
 	}
 	if km.Quit.Keys()[0] != "Q" {
 		t.Errorf("expected quit 'Q', got %q", km.Quit.Keys()[0])
+	}
+}
+
+func TestFocusToggleKeybindings(t *testing.T) {
+	cfg := config.DefaultConfig()
+	km := NewKeyMap(cfg.Keybinding)
+
+	// Test default focus keybindings
+	if km.FocusDetail.Keys()[0] != "enter" {
+		t.Errorf("expected focusDetail key 'enter', got %q", km.FocusDetail.Keys()[0])
+	}
+	if km.FocusBoard.Keys()[0] != "esc" {
+		t.Errorf("expected focusBoard key 'esc', got %q", km.FocusBoard.Keys()[0])
+	}
+
+	// Test custom focus keybindings
+	cfg.Keybinding.Detail.FocusDetail = "tab"
+	cfg.Keybinding.Detail.FocusBoard = "shift+tab"
+	km = NewKeyMap(cfg.Keybinding)
+
+	if km.FocusDetail.Keys()[0] != "tab" {
+		t.Errorf("expected custom focusDetail key 'tab', got %q", km.FocusDetail.Keys()[0])
+	}
+	if km.FocusBoard.Keys()[0] != "shift+tab" {
+		t.Errorf("expected custom focusBoard key 'shift+tab', got %q", km.FocusBoard.Keys()[0])
 	}
 }
