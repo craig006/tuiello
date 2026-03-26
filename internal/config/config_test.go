@@ -22,6 +22,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Keybinding.Board.MoveLeft != "h" {
 		t.Errorf("expected moveLeft 'h', got %q", cfg.Keybinding.Board.MoveLeft)
 	}
+	if cfg.Keybinding.Board.OpenCard != "o" {
+		t.Errorf("expected openCard 'o', got %q", cfg.Keybinding.Board.OpenCard)
+	}
+	if cfg.Keybinding.Board.CopyCardURL != "u" {
+		t.Errorf("expected copyCardUrl 'u', got %q", cfg.Keybinding.Board.CopyCardURL)
+	}
 }
 
 func TestLoadFromFile(t *testing.T) {
@@ -50,6 +56,35 @@ gui:
 	// defaults still apply for unset fields
 	if cfg.Keybinding.Universal.Quit != "q" {
 		t.Errorf("expected quit key 'q', got %q", cfg.Keybinding.Universal.Quit)
+	}
+}
+
+func TestLoadViewHideColumns(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yml")
+	err := os.WriteFile(cfgPath, []byte(`
+views:
+  - title: "Working Cards"
+    hideColumns:
+      - "On Hold"
+      - "To Do"
+`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(dir, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Views) != 1 {
+		t.Fatalf("expected 1 view, got %d", len(cfg.Views))
+	}
+	if len(cfg.Views[0].HideColumns) != 2 {
+		t.Fatalf("expected 2 hidden columns, got %d", len(cfg.Views[0].HideColumns))
+	}
+	if cfg.Views[0].HideColumns[0] != "On Hold" || cfg.Views[0].HideColumns[1] != "To Do" {
+		t.Fatalf("unexpected hidden columns: %#v", cfg.Views[0].HideColumns)
 	}
 }
 

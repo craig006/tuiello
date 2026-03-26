@@ -76,8 +76,9 @@ func (v *ViewBar) Keys() []string { return v.keys }
 func (v ViewBar) View(width int, boardName string, padding int) string {
 	bg := lipgloss.Color("236")
 	activeStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4)).Background(bg)
-	activeKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7)).Background(bg)
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
+	activeKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(6)).Background(bg)
+	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(15)).Background(bg)
+	inactiveKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(6)).Background(bg)
 	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8)).Background(bg)
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.ANSIColor(15)).Background(bg)
@@ -92,13 +93,13 @@ func (v ViewBar) View(width int, boardName string, padding int) string {
 	var viewParts []string
 	for i, view := range v.views {
 		title := view.Title
-		shortcut := " ‹" + v.keys[i] + "›"
+		shortcut := " [" + v.keys[i] + "]"
 
 		var tab string
 		if i == v.active {
 			tab = activeStyle.Render(title) + activeKeyStyle.Render(shortcut)
 		} else {
-			tab = inactiveStyle.Render(title + shortcut)
+			tab = inactiveStyle.Render(title) + inactiveKeyStyle.Render(shortcut)
 		}
 		viewParts = append(viewParts, tab)
 	}

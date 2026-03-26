@@ -19,11 +19,11 @@ type Config struct {
 }
 
 type GUIConfig struct {
-	Theme            ThemeConfig `mapstructure:"theme"`
-	ColumnWidth      int         `mapstructure:"columnWidth"`
-	ShowCardLabels   bool        `mapstructure:"showCardLabels"`
-	ShowDetailPanel  bool        `mapstructure:"showDetailPanel"`
-	Padding          int         `mapstructure:"padding"`
+	Theme           ThemeConfig `mapstructure:"theme"`
+	ColumnWidth     int         `mapstructure:"columnWidth"`
+	ShowCardLabels  bool        `mapstructure:"showCardLabels"`
+	ShowDetailPanel bool        `mapstructure:"showDetailPanel"`
+	Padding         int         `mapstructure:"padding"`
 }
 
 type ThemeConfig struct {
@@ -72,6 +72,8 @@ type BoardKeys struct {
 	MoveCardRight string `mapstructure:"moveCardRight"`
 	MoveCardUp    string `mapstructure:"moveCardUp"`
 	MoveCardDown  string `mapstructure:"moveCardDown"`
+	OpenCard      string `mapstructure:"openCard"`
+	CopyCardURL   string `mapstructure:"copyCardUrl"`
 	Enter         string `mapstructure:"enter"`
 	CustomCommand string `mapstructure:"customCommand"`
 }
@@ -106,12 +108,13 @@ type OptionConfig struct {
 }
 
 type ViewConfig struct {
-	Title           string `mapstructure:"title"`
-	Filter          string `mapstructure:"filter"`
-	Key             string `mapstructure:"key"`
-	ShowDetailPanel *bool  `mapstructure:"showDetailPanel"`
-	ColumnWidth     *int   `mapstructure:"columnWidth"`
-	ShowCardLabels  *bool  `mapstructure:"showCardLabels"`
+	Title           string   `mapstructure:"title"`
+	Filter          string   `mapstructure:"filter"`
+	Key             string   `mapstructure:"key"`
+	HideColumns     []string `mapstructure:"hideColumns"`
+	ShowDetailPanel *bool    `mapstructure:"showDetailPanel"`
+	ColumnWidth     *int     `mapstructure:"columnWidth"`
+	ShowCardLabels  *bool    `mapstructure:"showCardLabels"`
 }
 
 type ViewKeys struct {
@@ -148,6 +151,8 @@ func DefaultConfig() Config {
 				MoveCardRight: "L",
 				MoveCardUp:    "K",
 				MoveCardDown:  "J",
+				OpenCard:      "o",
+				CopyCardURL:   "u",
 				Enter:         "enter",
 				CustomCommand: "x",
 			},

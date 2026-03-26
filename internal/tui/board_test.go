@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/craig006/tuiello/internal/config"
@@ -214,5 +215,51 @@ func TestMoveCardUpTwice(t *testing.T) {
 	card, ok = b.columns[0].SelectedCard()
 	if !ok || card.ID != "c2" {
 		t.Fatalf("after second move: expected card c2, got %v (ok=%v)", card, ok)
+	}
+}
+
+func TestBoardHidesConfiguredColumns(t *testing.T) {
+	board := &trello.Board{ID: "b1", Name: "Test", Lists: []trello.List{
+		{ID: "l1", Name: "To Do", Cards: []trello.Card{{ID: "c1", Name: "Card 1", Pos: 1}}},
+		{ID: "l2", Name: "Doing", Cards: []trello.Card{{ID: "c2", Name: "Card 2", Pos: 1}}},
+		{ID: "l3", Name: "Done", Cards: []trello.Card{{ID: "c3", Name: "Card 3", Pos: 1}}},
+	}}
+	b := NewBoardModel(board, config.DefaultConfig(), 90, 30)
+	b.SetHiddenColumns([]string{"To Do"})
+
+	view := b.View()
+	if strings.Contains(view, "To Do") {
+		t.Fatalf("expected hidden column to be absent from board view, got %q", view)
+	}
+	if !strings.Contains(view, "Doing") || !strings.Contains(view, "Done") {
+		t.Fatalf("expected visible columns to remain in board view, got %q", view)
+	}
+
+	breadcrumb := b.RenderBreadcrumb(90)
+	if strings.Contains(breadcrumb, "To Do") {
+		t.Fatalf("expected hidden column to be absent from breadcrumb, got %q", breadcrumb)
+	}
+}
+
+func TestBoardFocusSkipsHiddenColumns(t *testing.T) {
+	board := &trello.Board{ID: "b1", Name: "Test", Lists: []trello.List{
+		{ID: "l1", Name: "To Do"},
+		{ID: "l2", Name: "Doing"},
+		{ID: "l3", Name: "Done"},
+	}}
+	b := NewBoardModel(board, config.DefaultConfig(), 90, 30)
+	b.SetHiddenColumns([]string{"Doing"})
+
+	b.FocusRight()
+	if b.FocusedColumn() != 2 {
+		t.Fatalf("expected focus to skip hidden column and land on index 2, got %d", b.FocusedColumn())
+	}
+	if got := b.PositionIndicator(); got != "[2/2]" {
+		t.Fatalf("expected visible position indicator [2/2], got %q", got)
+	}
+
+	b.FocusLeft()
+	if b.FocusedColumn() != 0 {
+		t.Fatalf("expected focus to move back to first visible column, got %d", b.FocusedColumn())
 	}
 }

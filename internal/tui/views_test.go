@@ -102,6 +102,15 @@ func TestViewBarRender(t *testing.T) {
 	if !strings.Contains(plain, "Test Board") {
 		t.Errorf("expected 'Test Board' in rendered output, got %q", plain)
 	}
+	if strings.Contains(plain, "‹") || strings.Contains(plain, "›") {
+		t.Errorf("expected view shortcuts without angle brackets, got %q", plain)
+	}
+	if !strings.Contains(plain, "My Cards [m]") {
+		t.Errorf("expected square-bracket shortcut text for active view, got %q", plain)
+	}
+	if !strings.Contains(rendered, "38;5;6") {
+		t.Errorf("expected cyan shortcut styling, got %q", rendered)
+	}
 }
 
 func TestViewBarEmptyViewsFallsBackToDefaults(t *testing.T) {

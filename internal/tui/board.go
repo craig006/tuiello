@@ -3,11 +3,12 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
-	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/craig006/tuiello/internal/config"
 	"github.com/craig006/tuiello/internal/trello"
@@ -17,15 +18,16 @@ const maxVisibleColumns = 3
 
 // BoardModel manages the kanban board view with a 3-column sliding window.
 type BoardModel struct {
-	columns     []Column
-	board       *trello.Board
-	focused     int
-	width       int
-	height      int
-	minColWidth int
-	padding     int
-	keyMap      KeyMap
-	theme       Theme
+	columns       []Column
+	board         *trello.Board
+	focused       int
+	hiddenColumns map[string]struct{}
+	width         int
+	height        int
+	minColWidth   int
+	padding       int
+	keyMap        KeyMap
+	theme         Theme
 	filter        Filter
 	dimColumns    bool // true when search bar is focused, dims active column border
 }
@@ -36,13 +38,14 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 
 	if len(board.Lists) == 0 {
 		return BoardModel{
-			board:       board,
-			width:       width,
-			height:      height,
-			minColWidth: cfg.GUI.ColumnWidth,
-			padding:     cfg.GUI.Padding,
-			keyMap:      km,
-			theme:       theme,
+			board:         board,
+			hiddenColumns: map[string]struct{}{},
+			width:         width,
+			height:        height,
+			minColWidth:   cfg.GUI.ColumnWidth,
+			padding:       cfg.GUI.Padding,
+			keyMap:        km,
+			theme:         theme,
 		}
 	}
 
@@ -58,15 +61,16 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 	}
 
 	bm := BoardModel{
-		columns:     columns,
-		board:       board,
-		focused:     0,
-		width:       width,
-		height:      height,
-		minColWidth: cfg.GUI.ColumnWidth,
-		padding:     cfg.GUI.Padding,
-		keyMap:      km,
-		theme:       theme,
+		columns:       columns,
+		board:         board,
+		focused:       0,
+		hiddenColumns: map[string]struct{}{},
+		width:         width,
+		height:        height,
+		minColWidth:   cfg.GUI.ColumnWidth,
+		padding:       cfg.GUI.Padding,
+		keyMap:        km,
+		theme:         theme,
 	}
 	bm.ResizeColumns()
 	return bm
@@ -74,10 +78,11 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 
 // ResizeColumns updates all column dimensions to match current board size.
 func (b *BoardModel) ResizeColumns() {
-	if len(b.columns) == 0 {
+	visibleColumns := b.VisibleColumnIndices()
+	if len(visibleColumns) == 0 {
 		return
 	}
-	visible := min(len(b.columns), maxVisibleColumns)
+	visible := min(len(visibleColumns), maxVisibleColumns)
 	colWidth := b.width / visible
 	if b.minColWidth > 0 && colWidth < b.minColWidth {
 		colWidth = b.minColWidth
@@ -88,32 +93,108 @@ func (b *BoardModel) ResizeColumns() {
 	}
 }
 
+func (b *BoardModel) SetHiddenColumns(names []string) {
+	b.hiddenColumns = make(map[string]struct{}, len(names))
+	for _, name := range names {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		b.hiddenColumns[strings.ToLower(trimmed)] = struct{}{}
+	}
+
+	if len(b.columns) == 0 {
+		return
+	}
+
+	visible := b.VisibleColumnIndices()
+	if len(visible) == 0 {
+		b.focused = 0
+		return
+	}
+
+	if !b.isVisibleColumn(b.focused) {
+		b.columns[b.focused].SetFocused(false)
+		b.focused = visible[0]
+	}
+
+	for i := range b.columns {
+		b.columns[i].SetFocused(i == b.focused)
+	}
+	if slices.Contains(visible, b.focused) {
+		b.columns[b.focused].SetFocused(true)
+	}
+	b.ResizeColumns()
+}
+
+func (b BoardModel) isHiddenColumn(name string) bool {
+	_, ok := b.hiddenColumns[strings.ToLower(strings.TrimSpace(name))]
+	return ok
+}
+
+func (b BoardModel) isVisibleColumn(index int) bool {
+	if index < 0 || index >= len(b.columns) {
+		return false
+	}
+	return !b.isHiddenColumn(b.columns[index].name)
+}
+
+func (b BoardModel) VisibleColumnIndices() []int {
+	indices := make([]int, 0, len(b.columns))
+	for i := range b.columns {
+		if b.isVisibleColumn(i) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
+func (b BoardModel) visibleColumnPosition(index int) int {
+	visible := b.VisibleColumnIndices()
+	for i, colIdx := range visible {
+		if colIdx == index {
+			return i
+		}
+	}
+	return -1
+}
+
 func (b *BoardModel) FocusedColumn() int { return b.focused }
 
 func (b *BoardModel) FocusLeft() {
-	if b.focused > 0 {
+	visible := b.VisibleColumnIndices()
+	current := b.visibleColumnPosition(b.focused)
+	if current > 0 {
 		b.columns[b.focused].SetFocused(false)
-		b.focused--
+		b.focused = visible[current-1]
 		b.columns[b.focused].SetFocused(true)
 	}
 }
 
 func (b *BoardModel) FocusRight() {
-	if b.focused < len(b.columns)-1 {
+	visible := b.VisibleColumnIndices()
+	current := b.visibleColumnPosition(b.focused)
+	if current >= 0 && current < len(visible)-1 {
 		b.columns[b.focused].SetFocused(false)
-		b.focused++
+		b.focused = visible[current+1]
 		b.columns[b.focused].SetFocused(true)
 	}
 }
 
 // VisibleRange returns the [start, end) indices of visible columns.
 func (b *BoardModel) VisibleRange() (int, int) {
-	total := len(b.columns)
+	visible := b.VisibleColumnIndices()
+	total := len(visible)
 	if total <= maxVisibleColumns {
 		return 0, total
 	}
 
-	start := b.focused - 1
+	current := b.visibleColumnPosition(b.focused)
+	if current < 0 {
+		current = 0
+	}
+
+	start := current - 1
 	if start < 0 {
 		start = 0
 	}
@@ -126,7 +207,11 @@ func (b *BoardModel) VisibleRange() (int, int) {
 }
 
 func (b *BoardModel) PositionIndicator() string {
-	return fmt.Sprintf("[%d/%d]", b.focused+1, len(b.columns))
+	visible := b.VisibleColumnIndices()
+	if len(visible) == 0 {
+		return "[0/0]"
+	}
+	return fmt.Sprintf("[%d/%d]", b.visibleColumnPosition(b.focused)+1, len(visible))
 }
 
 // SelectedCard returns the currently focused card and its list index.
@@ -275,18 +360,20 @@ func (b BoardModel) Update(msg tea.Msg) (BoardModel, tea.Cmd) {
 
 // RenderBreadcrumb renders the nav breadcrumb bar at the given width.
 func (b BoardModel) RenderBreadcrumb(width int) string {
-	if len(b.columns) == 0 {
+	visible := b.VisibleColumnIndices()
+	if len(visible) == 0 {
 		return ""
 	}
 	start, end := b.VisibleRange()
 
 	var breadcrumbParts []string
-	for i, col := range b.columns {
+	for pos, colIdx := range visible {
+		col := b.columns[colIdx]
 		name := col.name
 		var style lipgloss.Style
-		if i == b.focused {
+		if colIdx == b.focused {
 			style = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.ANSIColor(4))
-		} else if i >= start && i < end {
+		} else if pos >= start && pos < end {
 			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(7))
 		} else {
 			style = lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
@@ -304,6 +391,10 @@ func (b BoardModel) RenderBreadcrumb(width int) string {
 }
 
 func (b BoardModel) View() string {
+	visible := b.VisibleColumnIndices()
+	if len(visible) == 0 {
+		return "No visible lists in this view."
+	}
 	if len(b.columns) == 0 {
 		return "No lists on this board."
 	}
@@ -320,17 +411,17 @@ func (b BoardModel) View() string {
 
 	views := make([]string, 0, visibleCount)
 	border := lipgloss.RoundedBorder()
-	for i := start; i < end; i++ {
-		col := b.columns[i]
+	for _, colIdx := range visible[start:end] {
+		col := b.columns[colIdx]
 
 		borderColor := b.theme.InactiveBorder.GetForeground()
-		if i == b.focused && !b.dimColumns {
+		if colIdx == b.focused && !b.dimColumns {
 			borderColor = b.theme.ActiveBorder.GetForeground()
 		}
 
 		// Give the last visible column any remaining width from rounding
 		w := colWidth
-		if i == end-1 {
+		if len(views) == visibleCount-1 {
 			w = b.width - colWidth*(visibleCount-1)
 		}
 

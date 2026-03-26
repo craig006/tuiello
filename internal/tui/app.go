@@ -10,8 +10,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
-	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/craig006/tuiello/internal/commands"
 	"github.com/craig006/tuiello/internal/config"
@@ -32,9 +32,9 @@ type CardMovedMsg struct {
 }
 
 type CardMoveErrMsg struct {
-	Err    error
+	Err error
 	// For rollback
-	Card   trello.Card
+	Card    trello.Card
 	FromCol int
 	FromIdx int
 	ToCol   int
@@ -274,6 +274,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.updateSearchWidth()
 		// Apply active view's filter
 		viewCfg := a.viewBar.ActiveConfig()
+		a.board.SetHiddenColumns(viewCfg.HideColumns)
 		if viewCfg.Filter != "" {
 			a.searchInput.SetValue(viewCfg.Filter)
 			f := ParseFilter(viewCfg.Filter, a.currentUser)
@@ -528,6 +529,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 
+		case matchKey(msg, a.keyMap.OpenCard):
+			return a.handleOpenSelectedCard()
+
+		case matchKey(msg, a.keyMap.CopyCardURL):
+			return a.handleCopySelectedCardURL()
+
 		case matchKey(msg, a.keyMap.CustomCommand):
 			if a.boardReady && !a.showPalette {
 				filtered := commands.FilterByContext(a.config.CustomCommands, "card")
@@ -740,6 +747,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case msg.String() == "esc":
+			if a.showHelp {
+				a.showHelp = false
+				return a, nil
+			}
 			if a.boardReady && !a.showPalette && !a.showPrompt {
 				viewCfg := a.viewBar.ActiveConfig()
 				if a.searchInput.Value() != viewCfg.Filter {
@@ -755,6 +766,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return a, fetchCmd
 				}
 			}
+			return a, nil
 		}
 
 		// Direct-jump view switching — checked last so it never shadows standard keys
@@ -795,7 +807,7 @@ func fullCardIndex(cards []trello.Card, id string) int {
 }
 
 func (a App) handleMoveCardLeft() (tea.Model, tea.Cmd) {
-	if !a.boardReady || a.board.focused == 0 {
+	if !a.boardReady {
 		return a, nil
 	}
 
@@ -808,7 +820,11 @@ func (a App) handleMoveCardLeft() (tea.Model, tea.Cmd) {
 	if cardIdx < 0 {
 		return a, nil
 	}
-	targetCol := colIdx - 1
+	visiblePos := a.board.visibleColumnPosition(colIdx)
+	if visiblePos <= 0 {
+		return a, nil
+	}
+	targetCol := a.board.VisibleColumnIndices()[visiblePos-1]
 	rb := moveRollback{Card: card, FromCol: colIdx, FromIdx: cardIdx, ToCol: targetCol}
 
 	a.board.RemoveCard(colIdx, cardIdx)
@@ -821,7 +837,7 @@ func (a App) handleMoveCardLeft() (tea.Model, tea.Cmd) {
 }
 
 func (a App) handleMoveCardRight() (tea.Model, tea.Cmd) {
-	if !a.boardReady || a.board.focused >= len(a.board.columns)-1 {
+	if !a.boardReady {
 		return a, nil
 	}
 
@@ -834,7 +850,12 @@ func (a App) handleMoveCardRight() (tea.Model, tea.Cmd) {
 	if cardIdx < 0 {
 		return a, nil
 	}
-	targetCol := colIdx + 1
+	visible := a.board.VisibleColumnIndices()
+	visiblePos := a.board.visibleColumnPosition(colIdx)
+	if visiblePos < 0 || visiblePos >= len(visible)-1 {
+		return a, nil
+	}
+	targetCol := visible[visiblePos+1]
 	rb := moveRollback{Card: card, FromCol: colIdx, FromIdx: cardIdx, ToCol: targetCol}
 
 	a.board.RemoveCard(colIdx, cardIdx)
@@ -1023,6 +1044,54 @@ func (a App) handleMoveCardToBottom() (tea.Model, tea.Cmd) {
 	return a, a.reorderCardCmd(card.ID, newPos)
 }
 
+func (a App) handleOpenSelectedCard() (tea.Model, tea.Cmd) {
+	if !a.boardReady {
+		return a, nil
+	}
+
+	card, _, ok := a.board.SelectedCard()
+	if !ok {
+		a.status = "No card selected"
+		return a, nil
+	}
+	if card.URL == "" {
+		a.status = "Selected card has no URL"
+		return a, nil
+	}
+
+	a.status = fmt.Sprintf("Opening %q...", card.Name)
+	return a, func() tea.Msg {
+		if err := openExternalURL(card.URL); err != nil {
+			return StatusMsg{Text: fmt.Sprintf("Open failed: %v", err)}
+		}
+		return StatusMsg{Text: fmt.Sprintf("Opened %q in Trello", card.Name)}
+	}
+}
+
+func (a App) handleCopySelectedCardURL() (tea.Model, tea.Cmd) {
+	if !a.boardReady {
+		return a, nil
+	}
+
+	card, _, ok := a.board.SelectedCard()
+	if !ok {
+		a.status = "No card selected"
+		return a, nil
+	}
+	if card.URL == "" {
+		a.status = "Selected card has no URL"
+		return a, nil
+	}
+
+	a.status = fmt.Sprintf("Copying URL for %q...", card.Name)
+	return a, func() tea.Msg {
+		if err := writeClipboard(card.URL); err != nil {
+			return StatusMsg{Text: fmt.Sprintf("Copy failed: %v", err)}
+		}
+		return StatusMsg{Text: fmt.Sprintf("Copied URL for %q", card.Name)}
+	}
+}
+
 func (a App) executeCustomCommand(cmd config.CustomCommandConfig) (tea.Model, tea.Cmd) {
 	card, colIdx, ok := a.board.SelectedCard()
 	if !ok {
@@ -1144,6 +1213,7 @@ func (a *App) syncDetailAfterFilter() tea.Cmd {
 // applyActiveView applies the active view's filter and GUI overrides.
 func (a *App) applyActiveView() tea.Cmd {
 	viewCfg := a.viewBar.ActiveConfig()
+	a.board.SetHiddenColumns(viewCfg.HideColumns)
 
 	// Reset search bar to view's base filter
 	a.searchInput.SetValue(viewCfg.Filter)
@@ -1336,6 +1406,8 @@ func (a App) renderHelp() string {
 		{a.keyMap.MoveCardRight.Keys()[0], "Move card right"},
 		{a.keyMap.MoveCardUp.Keys()[0], "Move card up"},
 		{a.keyMap.MoveCardDown.Keys()[0], "Move card down"},
+		{a.keyMap.OpenCard.Keys()[0], "Open selected card in Trello"},
+		{a.keyMap.CopyCardURL.Keys()[0], "Copy selected card URL"},
 		{a.keyMap.CustomCommand.Keys()[0], "Command palette"},
 		{a.keyMap.DetailToggle.Keys()[0], "Toggle detail panel"},
 		{a.keyMap.DetailTabPrev.Keys()[0] + "/" + a.keyMap.DetailTabNext.Keys()[0], "Switch detail tab"},
