@@ -77,10 +77,11 @@ type CustomFieldValue struct {
 
 // Comment represents a comment on a Trello card.
 type Comment struct {
-	ID     string
-	Author Member
-	Body   string
-	Date   time.Time
+	ID       string
+	Author   Member
+	Body     string
+	Date     time.Time
+	Editable bool // Can user edit/delete this comment?
 }
 
 // Checklist represents a checklist on a Trello card.

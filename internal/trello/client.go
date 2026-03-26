@@ -2,12 +2,18 @@ package trello
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+)
+
+var (
+	ErrUpdateNotSupported = errors.New("comment update not supported by Trello API")
+	ErrDeleteNotSupported = errors.New("comment delete not supported by Trello API")
 )
 
 // Client is an HTTP client for the Trello REST API.
@@ -55,6 +61,27 @@ func (c *Client) get(path string, target interface{}) error {
 	return json.NewDecoder(resp.Body).Decode(target)
 }
 
+func (c *Client) post(path string, form url.Values, target interface{}) error {
+	form.Set("key", c.apiKey)
+	form.Set("token", c.token)
+	resp, err := c.httpClient.PostForm(c.BaseURL+path, form)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("unauthorized: check your TRELLO_API_KEY and TRELLO_TOKEN")
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+	if target != nil {
+		return json.NewDecoder(resp.Body).Decode(target)
+	}
+	return nil
+}
+
 func (c *Client) put(path string, form url.Values) error {
 	form.Set("key", c.apiKey)
 	form.Set("token", c.token)
@@ -72,6 +99,57 @@ func (c *Client) put(path string, form url.Values) error {
 		return fmt.Errorf("unauthorized: check your TRELLO_API_KEY and TRELLO_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (c *Client) putWithResponse(path string, form url.Values, target interface{}) error {
+	form.Set("key", c.apiKey)
+	form.Set("token", c.token)
+	req, err := http.NewRequest(http.MethodPut, c.BaseURL+path, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("unauthorized: check your TRELLO_API_KEY and TRELLO_TOKEN")
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+func (c *Client) delete(path string) error {
+	u, err := url.Parse(c.BaseURL + path)
+	if err != nil {
+		return err
+	}
+	q := u.Query()
+	q.Set("key", c.apiKey)
+	q.Set("token", c.token)
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequest(http.MethodDelete, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("unauthorized: check your TRELLO_API_KEY and TRELLO_TOKEN")
+	}
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
 	}
@@ -330,9 +408,10 @@ func (c *Client) FetchCardComments(cardID string) ([]Comment, error) {
 			t = time.Time{}
 		}
 		comments = append(comments, Comment{
-			ID:   a.ID,
-			Body: a.Data.Text,
-			Date: t,
+			ID:       a.ID,
+			Body:     a.Data.Text,
+			Date:     t,
+			Editable: false,
 			Author: Member{
 				ID:       a.MemberCreator.ID,
 				FullName: a.MemberCreator.FullName,
@@ -378,4 +457,99 @@ func (c *Client) FetchCardChecklists(cardID string) ([]Checklist, error) {
 		checklists = append(checklists, checklist)
 	}
 	return checklists, nil
+}
+
+// CreateComment creates a new comment on a card.
+func (c *Client) CreateComment(cardID, text string) (Comment, error) {
+	form := url.Values{}
+	form.Set("text", text)
+	var apiResp apiAction
+	path := fmt.Sprintf("/1/cards/%s/actions/comments", cardID)
+	if err := c.post(path, form, &apiResp); err != nil {
+		return Comment{}, err
+	}
+
+	t, err := time.Parse(time.RFC3339, apiResp.Date)
+	if err != nil {
+		t = time.Time{}
+	}
+	return Comment{
+		ID:       apiResp.ID,
+		Body:     apiResp.Data.Text,
+		Date:     t,
+		Author: Member{
+			ID:       apiResp.MemberCreator.ID,
+			FullName: apiResp.MemberCreator.FullName,
+			Initials: apiResp.MemberCreator.Initials,
+			Username: apiResp.MemberCreator.Username,
+		},
+		Editable: true,
+	}, nil
+}
+
+// UpdateComment updates an existing comment.
+func (c *Client) UpdateComment(commentID, text string) (Comment, error) {
+	form := url.Values{}
+	form.Set("text", text)
+	var apiResp apiAction
+	path := fmt.Sprintf("/1/actions/%s", commentID)
+	if err := c.putWithResponse(path, form, &apiResp); err != nil {
+		// Check for specific error codes that indicate unsupported operations
+		if strings.Contains(err.Error(), "400") || strings.Contains(err.Error(), "405") {
+			return Comment{}, ErrUpdateNotSupported
+		}
+		return Comment{}, err
+	}
+
+	t, err := time.Parse(time.RFC3339, apiResp.Date)
+	if err != nil {
+		t = time.Time{}
+	}
+	return Comment{
+		ID:       apiResp.ID,
+		Body:     apiResp.Data.Text,
+		Date:     t,
+		Author: Member{
+			ID:       apiResp.MemberCreator.ID,
+			FullName: apiResp.MemberCreator.FullName,
+			Initials: apiResp.MemberCreator.Initials,
+			Username: apiResp.MemberCreator.Username,
+		},
+		Editable: false,
+	}, nil
+}
+
+// DeleteComment deletes a comment.
+func (c *Client) DeleteComment(commentID string) error {
+	path := fmt.Sprintf("/1/actions/%s", commentID)
+	if err := c.delete(path); err != nil {
+		// Check for specific error codes that indicate unsupported operations
+		if strings.Contains(err.Error(), "400") || strings.Contains(err.Error(), "405") {
+			return ErrDeleteNotSupported
+		}
+		return err
+	}
+	return nil
+}
+
+// GetBoardMembers retrieves all members of a board.
+func (c *Client) GetBoardMembers(boardID string) ([]Member, error) {
+	var apiResp struct {
+		Members []apiMember `json:"members"`
+	}
+	path := fmt.Sprintf("/1/boards/%s?members=open&member_fields=fullName,username,initials,avatarHash", boardID)
+	if err := c.get(path, &apiResp); err != nil {
+		return nil, err
+	}
+
+	members := make([]Member, 0, len(apiResp.Members))
+	for _, am := range apiResp.Members {
+		members = append(members, Member{
+			ID:       am.ID,
+			FullName: am.FullName,
+			Initials: am.Initials,
+			Username: am.Username,
+		})
+	}
+	return members, nil
 }
