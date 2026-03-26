@@ -149,45 +149,76 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 				return cl, nil
 			}
 
-			// Then handle other special keys
+
+		// Handle autocomplete navigation and selection
+		if cl.autocomplete.Active {
 			switch msg.String() {
-			case "enter":
-				text := cl.textInput.Value()
-				if strings.TrimSpace(text) == "" {
-					return cl, nil // Ignore empty submissions
+			case "j":
+				if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches)-1 {
+					cl.autocomplete.SelectedIdx++
 				}
-				return cl, cl.submitComment()
+				return cl, nil
+			case "k":
+				if cl.autocomplete.SelectedIdx > 0 {
+					cl.autocomplete.SelectedIdx--
+				}
+				return cl, nil
+			case "enter", "tab":
+				if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches) {
+					member := cl.autocomplete.Matches[cl.autocomplete.SelectedIdx]
+					cl.insertMention(member.Username)
+				}
+				return cl, nil
 			case "esc":
-				cl.mode = CommentModeView
-				cl.textInput.SetValue("")
-				cl.textInput.Blur()
 				cl.autocomplete.Active = false
+				return cl, nil
+			case "backspace":
+				if len(cl.autocomplete.Query) > 0 {
+					cl.autocomplete.Query = cl.autocomplete.Query[:len(cl.autocomplete.Query)-1]
+					cl.filterMembers(cl.autocomplete.Query)
+				} else {
+					// If query is empty, close autocomplete
+					cl.autocomplete.Active = false
+				}
 				return cl, nil
 			}
 
-			// Handle typing after @ to filter
-			if cl.autocomplete.Active {
-				// Check if it's a rune character (not a special key like escape, enter, etc.)
-				keyStr := msg.String()
-				if len(keyStr) > 0 && keyStr != "backspace" && keyStr != "delete" && keyStr != "esc" && keyStr != "enter" {
-					// Add to query and filter
-					cl.autocomplete.Query += keyStr
-					cl.filterMembers(cl.autocomplete.Query)
-					return cl, nil
-				}
+			// When autocomplete is active, handle typing to filter
+			keyStr := msg.String()
+			if len(keyStr) > 0 && keyStr != "delete" {
+				// Add to query and filter
+				cl.autocomplete.Query += keyStr
+				cl.filterMembers(cl.autocomplete.Query)
+				return cl, nil
 			}
 
-			// Normal text input when not in autocomplete
-			if !cl.autocomplete.Active {
-				var cmd tea.Cmd
-				cl.textInput, cmd = cl.textInput.Update(msg)
-				return cl, cmd
-			}
 			return cl, nil
 		}
 
-		// Only handle navigation keys in View mode
-		if cl.mode == CommentModeView {
+		// Then handle other special keys when autocomplete is not active
+		switch msg.String() {
+		case "enter":
+			text := cl.textInput.Value()
+			if strings.TrimSpace(text) == "" {
+				return cl, nil // Ignore empty submissions
+			}
+			return cl, cl.submitComment()
+		case "esc":
+			cl.mode = CommentModeView
+			cl.textInput.SetValue("")
+			cl.textInput.Blur()
+			cl.autocomplete.Active = false
+			return cl, nil
+		}
+
+		// Normal text input when not in autocomplete
+		var cmd tea.Cmd
+		cl.textInput, cmd = cl.textInput.Update(msg)
+		return cl, cmd
+	}
+
+	// Only handle navigation keys in View mode
+	if cl.mode == CommentModeView {
 			switch {
 			case key.Matches(msg, cl.keyMap.MoveDown):
 				if cl.selectedIdx < len(cl.comments)-1 {
@@ -435,6 +466,32 @@ func (cl CommentsList) renderAutocomplete() string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// insertMention inserts a @username mention into the text input
+func (cl *CommentsList) insertMention(username string) {
+	text := cl.textInput.Value()
+
+	// Find the @ position and replace from @ to cursor with mention
+	pos := len(text)
+
+	// Backtrack to find @ character
+	atPos := pos - 1
+	for atPos >= 0 && text[atPos] != '@' {
+		atPos--
+	}
+
+	if atPos >= 0 {
+		// Replace from @ to current position with @username
+		before := text[:atPos]
+		after := text[pos:]
+		newText := before + "@" + username + after
+		cl.textInput.SetValue(newText)
+
+		// Close autocomplete
+		cl.autocomplete.Active = false
+		cl.autocomplete.Matches = []trello.Member{}
+	}
 }
 
 // renderCreateMode renders the create comment input interface

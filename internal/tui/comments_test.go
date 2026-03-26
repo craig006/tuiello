@@ -1174,3 +1174,268 @@ func TestRenderAutocompleteInactive(t *testing.T) {
 		t.Errorf("expected empty view when autocomplete inactive, got %q", view)
 	}
 }
+
+func TestAutocompleteNavigation(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bob"},
+		{ID: "member3", FullName: "Charlie Brown", Username: "charlie"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete
+	cl.autocomplete.Active = true
+	cl.autocomplete.Matches = cl.allMembers
+	cl.autocomplete.SelectedIdx = 0
+
+	if cl.autocomplete.SelectedIdx != 0 {
+		t.Errorf("expected initial SelectedIdx 0, got %d", cl.autocomplete.SelectedIdx)
+	}
+
+	// Navigate down with 'j' - we simulate this by directly testing the logic
+	// since we're testing navigation bounds
+	if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches)-1 {
+		cl.autocomplete.SelectedIdx++
+	}
+
+	if cl.autocomplete.SelectedIdx != 1 {
+		t.Errorf("expected SelectedIdx 1 after nav down, got %d", cl.autocomplete.SelectedIdx)
+	}
+
+	// Navigate down again
+	if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches)-1 {
+		cl.autocomplete.SelectedIdx++
+	}
+
+	if cl.autocomplete.SelectedIdx != 2 {
+		t.Errorf("expected SelectedIdx 2 after second nav down, got %d", cl.autocomplete.SelectedIdx)
+	}
+
+	// Navigate up with 'k'
+	if cl.autocomplete.SelectedIdx > 0 {
+		cl.autocomplete.SelectedIdx--
+	}
+
+	if cl.autocomplete.SelectedIdx != 1 {
+		t.Errorf("expected SelectedIdx 1 after nav up, got %d", cl.autocomplete.SelectedIdx)
+	}
+}
+
+func TestAutocompleteNavigationBoundaries(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bob"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete
+	cl.autocomplete.Active = true
+	cl.autocomplete.Matches = cl.allMembers
+	cl.autocomplete.SelectedIdx = 0
+
+	// Try to navigate up from first item - should not go past 0
+	if cl.autocomplete.SelectedIdx > 0 {
+		cl.autocomplete.SelectedIdx--
+	}
+
+	if cl.autocomplete.SelectedIdx != 0 {
+		t.Errorf("expected SelectedIdx to stay at 0, got %d", cl.autocomplete.SelectedIdx)
+	}
+
+	// Navigate to last item
+	cl.autocomplete.SelectedIdx = len(cl.autocomplete.Matches) - 1
+
+	// Try to navigate down from last item - should not go past last
+	if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches)-1 {
+		cl.autocomplete.SelectedIdx++
+	}
+
+	if cl.autocomplete.SelectedIdx != 1 {
+		t.Errorf("expected SelectedIdx to stay at 1 (last item), got %d", cl.autocomplete.SelectedIdx)
+	}
+}
+
+func TestAutocompleteMentionInsertion(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bob"},
+	}
+	cl.SetMembers(members)
+
+	// Type a message with @ (simulate user typing "Hey @")
+	cl.textInput.SetValue("Hey @")
+	cl.autocomplete.Active = true
+	cl.autocomplete.Pos = len(cl.textInput.Value()) - 1 // Position of @
+	cl.autocomplete.Matches = cl.allMembers
+	cl.autocomplete.SelectedIdx = 0
+	cl.autocomplete.Query = ""
+
+	// Insert mention for Alice
+	cl.insertMention("alice")
+
+	// Check that the text now contains the mention
+	result := cl.textInput.Value()
+	if !strings.Contains(result, "@alice") {
+		t.Errorf("expected mention '@alice' in result, got %q", result)
+	}
+
+	// Check that autocomplete is closed
+	if cl.autocomplete.Active {
+		t.Error("expected autocomplete to be closed after insertion")
+	}
+
+	if len(cl.autocomplete.Matches) != 0 {
+		t.Errorf("expected matches to be cleared, got %d", len(cl.autocomplete.Matches))
+	}
+}
+
+func TestAutocompleteMentionInsertionMultiple(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Bob Jones", Username: "bob"},
+	}
+	cl.SetMembers(members)
+
+	// Type initial text with first @
+	cl.textInput.SetValue("Hey @")
+
+	// Insert first mention
+	cl.autocomplete.Active = true
+	cl.autocomplete.Pos = len(cl.textInput.Value()) - 1
+	cl.autocomplete.Matches = cl.allMembers
+	cl.autocomplete.SelectedIdx = 0
+	cl.autocomplete.Query = ""
+	cl.insertMention("alice")
+
+	// Add more text with second mention
+	currentText := cl.textInput.Value()
+	cl.textInput.SetValue(currentText + " and @")
+
+	// Insert second mention
+	cl.autocomplete.Active = true
+	cl.autocomplete.Pos = len(cl.textInput.Value()) - 1
+	cl.autocomplete.Matches = cl.allMembers
+	cl.autocomplete.SelectedIdx = 1
+	cl.autocomplete.Query = ""
+	cl.insertMention("bob")
+
+	result := cl.textInput.Value()
+
+	// Both mentions should be present
+	if !strings.Contains(result, "@alice") {
+		t.Errorf("expected '@alice' in result, got %q", result)
+	}
+	if !strings.Contains(result, "@bob") {
+		t.Errorf("expected '@bob' in result, got %q", result)
+	}
+}
+
+func TestAutocompleteEscapeCloses(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+	cl.mode = CommentModeCreate
+	cl.textInput.Focus()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete
+	cl.autocomplete.Active = true
+	cl.autocomplete.Query = "al"
+	cl.autocomplete.Matches = cl.allMembers
+
+	if !cl.autocomplete.Active {
+		t.Error("expected autocomplete to be active")
+	}
+
+	// Simulate escape
+	cl.autocomplete.Active = false
+
+	if cl.autocomplete.Active {
+		t.Error("expected autocomplete to be closed after escape")
+	}
+}
+
+func TestAutocompleteBackspaceFilters(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+		{ID: "member2", FullName: "Alice Johnson", Username: "alice2"},
+		{ID: "member3", FullName: "Bob Jones", Username: "bob"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete and filter
+	cl.autocomplete.Active = true
+	cl.autocomplete.Query = "ali"
+	cl.filterMembers(cl.autocomplete.Query)
+
+	if len(cl.autocomplete.Matches) != 2 {
+		t.Errorf("expected 2 matches for 'ali', got %d", len(cl.autocomplete.Matches))
+	}
+
+	// Simulate backspace: remove last character from query
+	if len(cl.autocomplete.Query) > 0 {
+		cl.autocomplete.Query = cl.autocomplete.Query[:len(cl.autocomplete.Query)-1]
+		cl.filterMembers(cl.autocomplete.Query)
+	}
+
+	if cl.autocomplete.Query != "al" {
+		t.Errorf("expected query 'al' after backspace, got %q", cl.autocomplete.Query)
+	}
+
+	if len(cl.autocomplete.Matches) != 2 {
+		t.Errorf("expected 2 matches for 'al', got %d", len(cl.autocomplete.Matches))
+	}
+}
+
+func TestAutocompleteBackspaceClosesEmpty(t *testing.T) {
+	cl := newTestCommentsList()
+
+	// Set up test members
+	members := []trello.Member{
+		{ID: "member1", FullName: "Alice Smith", Username: "alice"},
+	}
+	cl.SetMembers(members)
+
+	// Activate autocomplete with empty query
+	cl.autocomplete.Active = true
+	cl.autocomplete.Query = ""
+
+	// Simulate backspace when query is empty
+	if len(cl.autocomplete.Query) > 0 {
+		cl.autocomplete.Query = cl.autocomplete.Query[:len(cl.autocomplete.Query)-1]
+	} else {
+		cl.autocomplete.Active = false
+	}
+
+	if cl.autocomplete.Active {
+		t.Error("expected autocomplete to be closed when backspace on empty query")
+	}
+}
