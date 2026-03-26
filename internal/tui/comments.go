@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"strings"
+
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
@@ -82,25 +85,82 @@ func NewCommentsList(theme Theme, keyMap KeyMap) CommentsList {
 }
 
 // Update handles incoming messages and updates the component state.
-// Currently minimal - will be expanded in later tasks.
 func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if !cl.focused {
 			return cl, nil
 		}
-		// Key handling will be filled in by later tasks
+
+		// Only handle navigation keys in View mode
+		if cl.mode == CommentModeView {
+			switch {
+			case key.Matches(msg, cl.keyMap.MoveDown):
+				if cl.selectedIdx < len(cl.comments)-1 {
+					cl.selectedIdx++
+				}
+				return cl, nil
+			case key.Matches(msg, cl.keyMap.MoveUp):
+				if cl.selectedIdx > 0 {
+					cl.selectedIdx--
+				}
+				return cl, nil
+			// c, e, d will be added in later tasks
+			}
+		}
 	}
 	return cl, nil
 }
 
 // View renders the comments list to a string.
-// Currently minimal - will be expanded in later tasks.
 func (cl CommentsList) View() string {
 	if len(cl.comments) == 0 {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("No comments")
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color("8")).
+			Render("No comments. Press 'c' to create.")
 	}
-	return "Comments: " + lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Render("TODO")
+
+	// Build comment list
+	var lines []string
+	for i, comment := range cl.comments {
+		// Format: "Author Name (YYYY-MM-DD)"
+		dateStr := comment.Date.Format("2006-01-02")
+		header := lipgloss.NewStyle().
+			Bold(true).
+			Render(comment.Author.FullName) +
+			" " +
+			lipgloss.NewStyle().
+				Foreground(lipgloss.Color("8")).
+				Render("(" + dateStr + ")")
+
+		// Body with word wrap
+		body := wordWrap(comment.Body, cl.width-4)
+
+		// Selection indicator (blue bar on left)
+		indicator := " "
+		if i == cl.selectedIdx {
+			indicator = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("4")).
+				Render("│")
+		}
+
+		lines = append(lines, indicator+" "+header)
+		for _, line := range strings.Split(body, "\n") {
+			lines = append(lines, "│ "+line)
+		}
+		lines = append(lines, "├"+strings.Repeat("─", cl.width-2))
+	}
+
+	// Render through viewport
+	content := strings.Join(lines, "\n")
+	cl.viewport.SetContent(content)
+
+	// Add footer
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		Render("Press 'c' to create, 'e' to edit, 'd' to delete")
+
+	return cl.viewport.View() + "\n" + footer
 }
 
 // SetComments updates the comments list and resets selection.
