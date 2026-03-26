@@ -79,9 +79,10 @@ type CommentsList struct {
 	keyMap   KeyMap
 
 	// State
-	focused    bool
-	loading    bool
-	loadingErr string
+	focused        bool
+	loading        bool
+	loadingErr     string
+	deleteConfirming bool
 }
 
 // NewCommentsList creates a new CommentsList component with default settings.
@@ -94,19 +95,20 @@ func NewCommentsList(theme Theme, keyMap KeyMap) CommentsList {
 	vp.SetHeight(20)
 
 	return CommentsList{
-		comments:     []trello.Comment{},
-		allMembers:   []trello.Member{},
-		selectedIdx:  0,
-		mode:         CommentModeView,
-		editingIdx:   -1,
-		textInput:    ti,
-		autocomplete: AutocompleteState{},
-		viewport:     vp,
-		width:        80,
-		height:       20,
-		theme:        theme,
-		keyMap:       keyMap,
-		focused:      false,
+		comments:         []trello.Comment{},
+		allMembers:       []trello.Member{},
+		selectedIdx:      0,
+		mode:             CommentModeView,
+		editingIdx:       -1,
+		textInput:        ti,
+		autocomplete:     AutocompleteState{},
+		viewport:         vp,
+		width:            80,
+		height:           20,
+		theme:            theme,
+		keyMap:           keyMap,
+		focused:          false,
+		deleteConfirming: false,
 	}
 }
 
@@ -116,6 +118,23 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 	case tea.KeyMsg:
 		if !cl.focused {
 			return cl, nil
+		}
+
+		// Handle deletion confirmation
+		if cl.deleteConfirming {
+			switch msg.String() {
+			case "y":
+				if cl.selectedIdx < len(cl.comments) {
+					comment := cl.comments[cl.selectedIdx]
+					cl.deleteConfirming = false
+					return cl, cl.deleteComment(comment.ID)
+				}
+				cl.deleteConfirming = false
+				return cl, nil
+			case "n":
+				cl.deleteConfirming = false
+				return cl, nil
+			}
 		}
 
 		// Handle input in Create/Edit modes
@@ -169,7 +188,14 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 						return cl, textinput.Blink
 					}
 				}
-			// d will be added in later tasks
+			case msg.String() == "d":
+				if cl.selectedIdx < len(cl.comments) {
+					comment := cl.comments[cl.selectedIdx]
+					if comment.Editable {
+						cl.deleteConfirming = true
+						return cl, nil
+					}
+				}
 			}
 		}
 	}
@@ -178,6 +204,20 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 
 // View renders the comments list to a string, dispatching to the correct render method.
 func (cl CommentsList) View() string {
+	// Show delete confirmation if active
+	if cl.deleteConfirming {
+		if cl.selectedIdx < len(cl.comments) {
+			comment := cl.comments[cl.selectedIdx]
+			prompt := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("1")).
+				Bold(true).
+				Render("Delete comment? (y/n)")
+
+			body := wordWrap(comment.Body, cl.width-4)
+			return comment.Author.FullName + "\n" + body + "\n\n" + prompt
+		}
+	}
+
 	switch cl.mode {
 	case CommentModeCreate:
 		return cl.renderCreateMode()
@@ -307,6 +347,13 @@ func (cl CommentsList) submitComment() tea.Cmd {
 			CommentID: cl.comments[cl.editingIdx].ID,
 			Text:      text,
 		}
+	}
+}
+
+// deleteComment generates a message for deleting a comment
+func (cl CommentsList) deleteComment(commentID string) tea.Cmd {
+	return func() tea.Msg {
+		return DeleteCommentRequestMsg{CommentID: commentID}
 	}
 }
 

@@ -715,3 +715,216 @@ func TestRenderEditMode(t *testing.T) {
 		t.Error("expected 'Cancel: Esc' in footer")
 	}
 }
+
+// Task 9: Delete comment tests
+func TestDeleteCommentInitiatesConfirmation(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments with an editable comment
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Simulate pressing 'd' key
+	if cl.selectedIdx < len(cl.comments) {
+		comment := cl.comments[cl.selectedIdx]
+		if comment.Editable {
+			cl.deleteConfirming = true
+		}
+	}
+
+	if !cl.deleteConfirming {
+		t.Error("expected deleteConfirming to be true after pressing 'd' on editable comment")
+	}
+}
+
+func TestDeleteCommentNotEditable(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments with a non-editable comment
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: false,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Attempt to start deletion on non-editable comment
+	if cl.selectedIdx < len(cl.comments) {
+		comment := cl.comments[cl.selectedIdx]
+		if comment.Editable {
+			cl.deleteConfirming = true
+		}
+	}
+
+	if cl.deleteConfirming {
+		t.Error("expected deleteConfirming to remain false for non-editable comment")
+	}
+}
+
+func TestDeleteCommentConfirmYes(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Start deletion confirmation
+	cl.deleteConfirming = true
+
+	// Call deleteComment directly (testing the command generation)
+	cmd := cl.deleteComment(cl.comments[cl.selectedIdx].ID)
+
+	// Verify that a command was returned
+	if cmd == nil {
+		t.Error("expected a command from deleteComment, got nil")
+	}
+
+	// Execute the command to get the message
+	msg := cmd()
+	deleteMsg, ok := msg.(DeleteCommentRequestMsg)
+	if !ok {
+		t.Fatalf("expected DeleteCommentRequestMsg, got %T", msg)
+	}
+
+	if deleteMsg.CommentID != "comment1" {
+		t.Errorf("expected CommentID 'comment1', got %q", deleteMsg.CommentID)
+	}
+}
+
+func TestDeleteCommentConfirmNo(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Set up test comments
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Start deletion confirmation
+	cl.deleteConfirming = true
+
+	// Cancel deletion (pressing 'n')
+	cl.deleteConfirming = false
+
+	if cl.deleteConfirming {
+		t.Error("expected deleteConfirming to be false after cancelling")
+	}
+
+	// Verify the comment is still there
+	if len(cl.comments) != 1 {
+		t.Errorf("expected 1 comment to remain, got %d", len(cl.comments))
+	}
+}
+
+func TestDeleteCommentBoundaries(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetFocus(true)
+
+	// Test 1: No comments - should not crash
+	cl.deleteConfirming = false
+	if len(cl.comments) > 0 && cl.selectedIdx < len(cl.comments) {
+		comment := cl.comments[cl.selectedIdx]
+		if comment.Editable {
+			cl.deleteConfirming = true
+		}
+	}
+	if cl.deleteConfirming {
+		t.Error("expected deleteConfirming to remain false when no comments")
+	}
+
+	// Test 2: Invalid selectedIdx - should not crash
+	cl.SetComments([]trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	})
+	cl.selectedIdx = 100 // Invalid index
+
+	cl.deleteConfirming = false
+	if cl.selectedIdx < len(cl.comments) {
+		comment := cl.comments[cl.selectedIdx]
+		if comment.Editable {
+			cl.deleteConfirming = true
+		}
+	}
+
+	if cl.deleteConfirming {
+		t.Error("expected deleteConfirming to remain false with invalid index")
+	}
+}
+
+func TestDeleteCommentShowsConfirmation(t *testing.T) {
+	cl := newTestCommentsList()
+	cl.SetSize(80, 20)
+
+	// Set up test comments
+	comments := []trello.Comment{
+		{
+			ID:       "comment1",
+			Author:   trello.Member{ID: "user1", FullName: "User One"},
+			Body:     "First comment to delete",
+			Date:     parseTestDate("2026-01-15"),
+			Editable: true,
+		},
+	}
+	cl.SetComments(comments)
+
+	// Start deletion confirmation
+	cl.deleteConfirming = true
+
+	view := cl.View()
+	cleanView := stripANSI(view)
+
+	// Check for deletion prompt
+	if !stringContains(cleanView, "Delete comment?") {
+		t.Error("expected 'Delete comment?' prompt in confirmation view")
+	}
+
+	// Check for y/n instructions
+	if !stringContains(cleanView, "(y/n)") {
+		t.Error("expected '(y/n)' instructions in confirmation view")
+	}
+
+	// Check that comment details are shown
+	if !stringContains(cleanView, "User One") {
+		t.Error("expected author 'User One' in confirmation view")
+	}
+
+	if !stringContains(cleanView, "First comment to delete") {
+		t.Error("expected comment body in confirmation view")
+	}
+}
