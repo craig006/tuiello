@@ -481,6 +481,28 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
+		// Handle focus toggles (board <-> detail) — only if no other UI is active
+		switch {
+		// Focus toggles
+		case matchKey(msg, a.keyMap.FocusDetail):
+			// Enter focuses detail (only if board has focus and a card is selected)
+			if a.boardHasFocus {
+				if _, _, ok := a.board.SelectedCard(); ok {
+					a.boardHasFocus = false
+					a.detail.SetFocus(true)
+					return a, nil
+				}
+			}
+
+		case matchKey(msg, a.keyMap.FocusBoard):
+			// Escape returns focus to board
+			if !a.boardHasFocus {
+				a.boardHasFocus = true
+				a.detail.SetFocus(false)
+				return a, nil
+			}
+		}
+
 		// Handle search bar input
 		if a.searchFocused {
 			switch msg.String() {
@@ -779,18 +801,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Pass to board for card navigation (up/down via bubbles/list)
+		// Route to board or detail based on focus
 		if a.boardReady {
 			var cmd tea.Cmd
-			a.board, cmd = a.board.Update(msg)
-			if a.detail.open {
-				if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
-					a.detail.SetCard(card)
-					if a.detail.NeedsFetch() {
-						a.detail.MarkLoading()
-						return a, tea.Batch(cmd, a.fetchDetailData())
+			if a.boardHasFocus {
+				a.board, cmd = a.board.Update(msg)
+				if a.detail.open {
+					if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
+						a.detail.SetCard(card)
+						if a.detail.NeedsFetch() {
+							a.detail.MarkLoading()
+							return a, tea.Batch(cmd, a.fetchDetailData())
+						}
 					}
 				}
+			} else {
+				a.detail, cmd = a.detail.Update(msg)
 			}
 			return a, cmd
 		}

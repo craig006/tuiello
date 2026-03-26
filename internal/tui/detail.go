@@ -46,9 +46,10 @@ type CardChecklistsFetchErrMsg struct {
 
 // DetailModel is a self-contained Bubble Tea component for the detail panel.
 type DetailModel struct {
-	open   bool
-	tab    int
-	cardID string
+	open    bool
+	focused bool
+	tab     int
+	cardID  string
 
 	card       trello.Card
 	comments   []trello.Comment
@@ -89,6 +90,17 @@ func (d *DetailModel) NextTab() {
 
 func (d *DetailModel) PrevTab() {
 	d.tab = (d.tab - 1 + tabCount) % tabCount
+}
+
+// SetFocus sets the focus state of the detail panel.
+// When defocusing, any active inputs will be blurred (to be implemented in future tasks).
+func (d *DetailModel) SetFocus(focused bool) {
+	d.focused = focused
+	// If defocusing, blur any active input
+	if !focused {
+		// Will be implemented more fully in later tasks
+		// For now, just set the flag
+	}
 }
 
 // SetCard updates the displayed card and clears cached data.

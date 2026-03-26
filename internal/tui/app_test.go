@@ -57,6 +57,7 @@ func TestAppInitNoBoard(t *testing.T) {
 func TestAppBoardFetchedMsg(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
 	client := trello.NewClient("key", "token")
 	app := NewApp(client, cfg)
 	app.width = 90
@@ -67,7 +68,7 @@ func TestAppBoardFetchedMsg(t *testing.T) {
 		Name: "Test Board",
 		Lists: []trello.List{
 			{ID: "l1", Name: "Todo", Cards: []trello.Card{
-				{ID: "c1", Name: "Card 1", Pos: 1.0},
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
 			}},
 			{ID: "l2", Name: "Done", Cards: []trello.Card{}},
 		},
@@ -419,5 +420,180 @@ func TestUserConfigHiddenViewHidesColumnsWhenSelected(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Backlog") || !strings.Contains(rendered, "Doing") {
 		t.Fatalf("expected remaining visible columns to render, got %q", rendered)
+	}
+}
+
+// Test focus toggle: Enter from board focuses detail (with selected card)
+func TestFocusToggleEnterWithSelectedCard(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Verify initial state: board has focus
+	if !app.boardHasFocus {
+		t.Fatal("expected board to have focus initially")
+	}
+	if app.detail.focused {
+		t.Fatal("expected detail to not have focus initially")
+	}
+
+	// Manually select the first card
+	if len(app.board.columns) > 0 && len(app.board.columns[0].cards) > 0 {
+		app.board.columns[0].Select(0)
+		firstCard := app.board.columns[0].cards[0]
+		app.detail.SetCard(firstCard)
+	}
+
+	// Press Enter to focus detail (with selected card)
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	model, _ = app.Update(msg)
+	app = model.(App)
+
+	// Verify state after Enter: detail has focus, board does not
+	if app.boardHasFocus {
+		t.Fatal("expected board to lose focus after pressing Enter")
+	}
+	if !app.detail.focused {
+		t.Fatal("expected detail to have focus after pressing Enter")
+	}
+}
+
+// Test focus toggle: Enter from board with no selected card does nothing
+func TestFocusToggleEnterWithoutSelectedCard(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{}}, // No cards
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Verify initial state: board has focus
+	if !app.boardHasFocus {
+		t.Fatal("expected board to have focus initially")
+	}
+
+	// Press Enter to focus detail (no selected card)
+	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	model, _ = app.Update(msg)
+	app = model.(App)
+
+	// Verify state unchanged: board still has focus
+	if !app.boardHasFocus {
+		t.Fatal("expected board to retain focus when no card is selected")
+	}
+	if app.detail.focused {
+		t.Fatal("expected detail to not have focus when no card is selected")
+	}
+}
+
+// Test focus toggle: Escape from detail returns to board
+func TestFocusToggleEscapeFromDetail(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Manually set focus to detail
+	app.boardHasFocus = false
+	app.detail.SetFocus(true)
+
+	// Press Escape to return focus to board
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
+	model, _ = app.Update(msg)
+	app = model.(App)
+
+	// Verify state after Escape: board has focus again
+	if !app.boardHasFocus {
+		t.Fatal("expected board to have focus after pressing Escape")
+	}
+	if app.detail.focused {
+		t.Fatal("expected detail to lose focus after pressing Escape")
+	}
+}
+
+// Test focus toggle: Escape from board does nothing
+func TestFocusToggleEscapeFromBoard(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Verify initial state: board has focus
+	if !app.boardHasFocus {
+		t.Fatal("expected board to have focus initially")
+	}
+
+	// Press Escape while board has focus
+	msg := tea.KeyPressMsg{Code: tea.KeyEscape}
+	model, _ = app.Update(msg)
+	app = model.(App)
+
+	// Verify state unchanged: board still has focus
+	if !app.boardHasFocus {
+		t.Fatal("expected board to retain focus when Escape is pressed from board")
+	}
+	if app.detail.focused {
+		t.Fatal("expected detail to not have focus")
 	}
 }
