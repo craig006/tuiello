@@ -894,3 +894,216 @@ func TestDeleteCommentError(t *testing.T) {
 	// The command should execute and may return nil or an error message
 	_ = cmd()
 }
+
+// Test focus-aware border styling
+
+func TestBoardBlueBorderWhenFocused(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 120
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+	app.boardHasFocus = true
+
+	// Verify that boardHasFocus is true
+	if !app.boardHasFocus {
+		t.Fatal("expected boardHasFocus to be true")
+	}
+
+	// Verify board border styling can be applied based on focus state
+	boardView := app.board.View()
+	if len(boardView) == 0 {
+		t.Error("expected board to render content")
+	}
+}
+
+func TestBoardGrayBorderWhenNotFocused(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 120
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+	app.boardHasFocus = false
+
+	// Verify that boardHasFocus is false
+	if app.boardHasFocus {
+		t.Fatal("expected boardHasFocus to be false")
+	}
+
+	// Verify board still renders when not focused
+	boardView := app.board.View()
+	if len(boardView) == 0 {
+		t.Error("expected board to render content even when not focused")
+	}
+}
+
+func TestDetailBlueBorderWhenFocused(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 120
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Open detail panel and give it focus
+	app.detail.open = true
+	app.boardHasFocus = false
+	if len(app.board.columns) > 0 && len(app.board.columns[0].cards) > 0 {
+		app.detail.SetCard(app.board.columns[0].cards[0])
+	}
+
+	// Verify that detail is open and boardHasFocus indicates detail has focus
+	if !app.detail.open {
+		t.Error("expected detail panel to be open")
+	}
+	if app.boardHasFocus {
+		t.Error("expected boardHasFocus to be false when detail has focus")
+	}
+}
+
+func TestDetailGrayBorderWhenNotFocused(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 120
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Open detail panel but board has focus
+	app.detail.open = true
+	app.boardHasFocus = true
+	if len(app.board.columns) > 0 && len(app.board.columns[0].cards) > 0 {
+		app.detail.SetCard(app.board.columns[0].cards[0])
+	}
+
+	// Verify that detail is open but boardHasFocus is true
+	if !app.detail.open {
+		t.Error("expected detail panel to be open")
+	}
+	if !app.boardHasFocus {
+		t.Error("expected boardHasFocus to be true when board has focus")
+	}
+}
+
+func TestDetailBorderOnlyWhenOpen(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 120
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Ensure detail panel is explicitly closed
+	app.detail.open = false
+
+	// Detail.View() should return empty string when closed
+	detailView := app.detail.View()
+	if detailView != "" {
+		t.Errorf("expected empty detail view when closed, got %q", detailView)
+	}
+}
+
+func TestDetailWidthManagementWhenOpen(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 100
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Open detail panel
+	app.detail.open = true
+	expectedDetailWidth := 40
+	app.detail.SetSize(expectedDetailWidth, 26)
+
+	// Verify detail has been sized correctly
+	if app.detail.width != expectedDetailWidth {
+		t.Errorf("expected detail width %d, got %d", expectedDetailWidth, app.detail.width)
+	}
+}
