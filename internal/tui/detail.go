@@ -244,14 +244,13 @@ func (d *DetailModel) MarkLoading() {
 func (d DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	// If Comments tab is active and detail is focused, delegate to CommentsList
 	if d.open && d.focused && d.tab == tabComments && d.commentsList != nil {
-		*d.commentsList, msg = d.commentsList.Update(msg)
-		// Return early if it was a message CommentsList handled
-		// Otherwise fall through to normal viewport handling
-		switch msg.(type) {
-		case CreateCommentRequestMsg, UpdateCommentRequestMsg, DeleteCommentRequestMsg:
-			// CommentsList has handled these - return them as commands to parent
-			return d, func() tea.Msg { return msg }
+		updated, cmd := d.commentsList.Update(msg)
+		*d.commentsList = updated
+		// Return any command from CommentsList (e.g., comment operations)
+		if cmd != nil {
+			return d, cmd
 		}
+		return d, nil
 	}
 
 	var cmd tea.Cmd
