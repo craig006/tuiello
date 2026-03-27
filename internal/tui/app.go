@@ -265,6 +265,19 @@ func (a *App) HandleKeyEvent(key string) bool {
 	return false
 }
 
+// HandleSearchKeyEvent processes keyboard events for the search input
+// Returns true if handled, false to continue
+func (a *App) HandleSearchKeyEvent(key string) bool {
+	// Search input handling remains minimal for now
+	// Focus management will be enhanced in later refactoring
+	switch key {
+	case "esc":
+		a.searchFocused = false
+		return true
+	}
+	return false
+}
+
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
