@@ -114,6 +114,19 @@ func (d *DetailModel) HandleKeyEvent(key string) bool {
 	return false
 }
 
+// GetFocusableElements returns IDs of focusable elements in the active tab
+func (d *DetailModel) GetFocusableElements() []string {
+	// Comments tab has focusable comments
+	if d.tab == tabComments {
+		ids := make([]string, len(d.comments))
+		for i, c := range d.comments {
+			ids[i] = c.ID
+		}
+		return ids
+	}
+	return nil
+}
+
 // SetCard updates the displayed card and clears cached data.
 // After calling SetCard, check NeedsFetch() to determine if a fetch command is needed.
 func (d *DetailModel) SetCard(card trello.Card) {

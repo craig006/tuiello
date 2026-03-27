@@ -488,6 +488,12 @@ func (cl *CommentsList) HandleKeyEvent(key string) bool {
 	return false
 }
 
+// IsEditing returns true if a comment is currently being edited
+// For now, always returns false - editing mode stub for focus routing architecture
+func (cl *CommentsList) IsEditing() bool {
+	return cl.mode == CommentModeEdit
+}
+
 // submitComment generates a message for creating or updating a comment
 func (cl CommentsList) submitComment() tea.Cmd {
 	return func() tea.Msg {
