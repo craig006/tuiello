@@ -253,11 +253,11 @@ func (a App) fetchDetailData() tea.Cmd {
 
 // HandleKeyEvent processes app-level keyboard shortcuts
 // Returns true if handled, false to continue bubbling
+// NOTE: Quit (q, ctrl+c) is NOT handled here - it's handled in the main Update switch
+// to ensure tea.Quit() is properly returned
 func (a *App) HandleKeyEvent(key string) bool {
-	// Global shortcuts that always work
+	// Global shortcuts that always work (but NOT quit - see note above)
 	switch key {
-	case "q", "ctrl+c": // Quit
-		return true // Will be handled by caller
 	case "?": // Help
 		a.showHelp = !a.showHelp
 		return true
