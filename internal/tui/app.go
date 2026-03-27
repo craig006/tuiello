@@ -105,7 +105,7 @@ type App struct {
 	memberModal     MultiSelectModel
 	labelModal      MultiSelectModel
 
-	boardHasFocus bool  // true = board active (blue border), false = detail active
+	focusManager *FocusManager
 }
 
 func NewApp(client *trello.Client, cfg config.Config) App {
@@ -121,7 +121,7 @@ func NewApp(client *trello.Client, cfg config.Config) App {
 		loading:        true,
 		commandPalette: palette,
 		detail:         NewDetailModel(km, NewTheme(cfg.GUI.Theme), cfg.GUI.Padding),
-		boardHasFocus: true,  // Board starts with focus
+		focusManager:   NewFocusManager("board"),
 	}
 	a.viewBar = NewViewBar(cfg.Views)
 	si := textinput.New()
@@ -249,6 +249,20 @@ func (a App) fetchDetailData() tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// HandleKeyEvent processes app-level keyboard shortcuts
+// Returns true if handled, false to continue bubbling
+func (a *App) HandleKeyEvent(key string) bool {
+	// Global shortcuts that always work
+	switch key {
+	case "q", "ctrl+c": // Quit
+		return true // Will be handled by caller
+	case "?": // Help
+		a.showHelp = !a.showHelp
+		return true
+	}
+	return false
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -494,14 +508,20 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-		// Handle focus toggles (board <-> detail) — only if no other UI is active
+		// Route keyboard events through focus hierarchy
+		// 1. Check if app-level shortcuts handle it
+		if a.HandleKeyEvent(msg.String()) {
+			return a, nil
+		}
+
+		// 2. Handle focus toggles (board <-> detail) — only if no other UI is active
 		switch {
 		// Focus toggles
 		case matchKey(msg, a.keyMap.FocusDetail):
 			// Enter focuses detail (only if board has focus and a card is selected)
-			if a.boardHasFocus {
+			if a.focusManager.FocusedSection() == "board" {
 				if _, _, ok := a.board.SelectedCard(); ok {
-					a.boardHasFocus = false
+					a.focusManager.SetFocusedSection("detail")
 					a.detail.SetFocus(true)
 					return a, nil
 				}
@@ -509,8 +529,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case matchKey(msg, a.keyMap.FocusBoard):
 			// Escape returns focus to board
-			if !a.boardHasFocus {
-				a.boardHasFocus = true
+			if a.focusManager.FocusedSection() == "detail" {
+				a.focusManager.SetFocusedSection("board")
 				a.detail.SetFocus(false)
 				return a, nil
 			}
@@ -817,7 +837,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route to board or detail based on focus
 		if a.boardReady {
 			var cmd tea.Cmd
-			if a.boardHasFocus {
+			if a.focusManager.FocusedSection() == "board" {
 				a.board, cmd = a.board.Update(msg)
 				if a.detail.open {
 					if card, _, ok := a.board.SelectedCard(); ok && card.ID != a.detail.cardID {
@@ -1400,9 +1420,8 @@ func (a App) View() tea.View {
 			// Update layout for detail panel (60/40 split)
 			a.updateDetailLayout()
 
-			// Pass focus state to board and detail for border styling
-			a.board.SetFocus(a.boardHasFocus)
-			a.detail.SetBoardFocus(a.boardHasFocus)
+			// Pass focus state to board for border styling
+			a.board.SetFocus(a.focusManager.FocusedSection() == "board")
 
 			boardContent = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
 		} else {

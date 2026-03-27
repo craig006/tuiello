@@ -69,7 +69,6 @@ type DetailModel struct {
 	padding       int
 	keyMap        KeyMap
 	theme         Theme
-	boardHasFocus bool  // true when board has focus, false when detail has focus
 }
 
 func NewDetailModel(km KeyMap, theme Theme, padding int) DetailModel {
@@ -240,11 +239,6 @@ func (d DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 }
 
 // View renders the detail panel with border, tab bar, and content.
-// SetBoardFocus sets whether the board has focus (false means detail has focus)
-func (d *DetailModel) SetBoardFocus(boardHasFocus bool) {
-	d.boardHasFocus = boardHasFocus
-}
-
 func (d DetailModel) View() string {
 	if !d.open {
 		return ""
@@ -281,9 +275,9 @@ func (d DetailModel) View() string {
 	d.viewport.SetContent(content)
 
 	// Build border with tab bar
-	// Detail border is active (blue) when detail has focus (!boardHasFocus)
+	// Detail border is active (blue) when detail has focus
 	borderColor := d.theme.InactiveBorder.GetForeground()
-	if !d.boardHasFocus {
+	if d.focused {
 		borderColor = d.theme.ActiveBorder.GetForeground()
 	}
 	tabActiveColor := d.theme.ActiveBorder.GetForeground()
