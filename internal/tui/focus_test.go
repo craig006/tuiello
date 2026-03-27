@@ -22,7 +22,7 @@ func TestNewFocusManager(t *testing.T) {
 
 func TestSetFocusedSection(t *testing.T) {
 	fm := NewFocusManager("board")
-	fm.SetFocusedElement("board", "card1")
+	fm.SetFocusedElement("card1")
 
 	if fm.FocusedElement() != "card1" {
 		t.Errorf("expected focused element 'card1', got '%s'", fm.FocusedElement())
@@ -41,11 +41,12 @@ func TestSetFocusedSection(t *testing.T) {
 
 func TestSetFocusedElementIgnoredWhenNotInFocusedSection(t *testing.T) {
 	fm := NewFocusManager("board")
+	fm.OpenModal()
 
-	ok := fm.SetFocusedElement("detail", "comment1")
+	ok := fm.SetFocusedElement("comment1")
 
 	if ok {
-		t.Errorf("expected SetFocusedElement to return false when section doesn't match")
+		t.Errorf("expected SetFocusedElement to return false when modal is active")
 	}
 
 	if fm.FocusedElement() != "" {
@@ -56,7 +57,7 @@ func TestSetFocusedElementIgnoredWhenNotInFocusedSection(t *testing.T) {
 func TestSetFocusedElementSucceedsWhenInFocusedSection(t *testing.T) {
 	fm := NewFocusManager("board")
 
-	ok := fm.SetFocusedElement("board", "card1")
+	ok := fm.SetFocusedElement("card1")
 
 	if !ok {
 		t.Errorf("expected SetFocusedElement to return true when section matches")
@@ -69,7 +70,7 @@ func TestSetFocusedElementSucceedsWhenInFocusedSection(t *testing.T) {
 
 func TestModalSuspendAndRestore(t *testing.T) {
 	fm := NewFocusManager("board")
-	fm.SetFocusedElement("board", "card1")
+	fm.SetFocusedElement("card1")
 
 	fm.OpenModal()
 

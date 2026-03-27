@@ -49,11 +49,10 @@ func (fm *FocusManager) SetFocusedSection(section string) {
 	fm.focusedElement = ""
 }
 
-// SetFocusedElement sets the focused element within a section.
-// Returns true if successful (section matches the currently focused section),
-// false if the section doesn't match.
-func (fm *FocusManager) SetFocusedElement(section, element string) bool {
-	if section != fm.focusedSection {
+// SetFocusedElement sets the focused element within the currently focused section.
+// Returns true if successful, false if the element cannot be set (e.g., during modal).
+func (fm *FocusManager) SetFocusedElement(element string) bool {
+	if fm.modalActive {
 		return false
 	}
 
@@ -77,24 +76,13 @@ func (fm *FocusManager) CloseModal() {
 	fm.modalActive = false
 }
 
-// NotifyContentChanged validates that the focused element still exists in the given section.
-// If the section doesn't match the focused section or the element is not in the list,
-// the element focus is cleared.
-func (fm *FocusManager) NotifyContentChanged(section string, currentElements []string) {
+// NotifyContentChanged is called when a section's content changes.
+// If the section is currently focused, the focused element is cleared
+// to allow the section to re-establish focus on valid content.
+func (fm *FocusManager) NotifyContentChanged(section string) {
 	if section != fm.focusedSection {
 		return
 	}
 
-	// Check if focused element exists in the current elements list
-	found := false
-	for _, elem := range currentElements {
-		if elem == fm.focusedElement {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		fm.focusedElement = ""
-	}
+	fm.focusedElement = ""
 }
