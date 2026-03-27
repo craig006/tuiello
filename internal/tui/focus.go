@@ -86,3 +86,19 @@ func (fm *FocusManager) NotifyContentChanged(section string) {
 
 	fm.focusedElement = ""
 }
+
+// KeyHandler is implemented by sections and elements that handle keyboard input
+type KeyHandler interface {
+	// HandleKeyEvent processes a keyboard event
+	// Returns true if handled, false to bubble up
+	HandleKeyEvent(key string) bool
+}
+
+// FocusAware is optionally implemented by sections to manage focus state
+type FocusAware interface {
+	// GetFocusableElements returns the IDs of currently focusable elements
+	GetFocusableElements() []string
+
+	// OnContentChanged is called when focusable elements change
+	OnContentChanged()
+}
