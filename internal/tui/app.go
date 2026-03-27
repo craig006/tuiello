@@ -589,6 +589,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// If detail panel is focused and a comment is being edited, let detail handle ALL input
+		// This prevents board shortcuts (h, l, j, k, etc.) from executing while editing
+		if a.detail.open && a.focusManager.FocusedSection() == "detail" && a.detail.commentsList.IsEditing() {
+			if a.boardReady {
+				var cmd tea.Cmd
+				a.detail, cmd = a.detail.Update(msg)
+				return a, cmd
+			}
+		}
+
 		switch {
 		case matchKey(msg, a.keyMap.Quit):
 			return a, tea.Quit
