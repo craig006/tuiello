@@ -1400,32 +1400,17 @@ func (a App) View() tea.View {
 			// Update layout for detail panel (60/40 split)
 			a.updateDetailLayout()
 
-			// Apply focus-aware border styling to board
-			boardBorderColor := "8" // dim gray by default
-			if a.boardHasFocus {
-				boardBorderColor = "4" // blue when focused
-			}
-			boardStyle := lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color(boardBorderColor))
-			boardView := boardStyle.Render(a.board.View())
+			// Pass focus state to board and detail for border styling
+			a.board.SetFocus(a.boardHasFocus)
+			a.detail.SetBoardFocus(a.boardHasFocus)
 
-			// Apply focus-aware border styling to detail
-			detailBorderColor := "8" // dim gray by default
-			if !a.boardHasFocus {
-				detailBorderColor = "4" // blue when focused
-			}
-			detailStyle := lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color(detailBorderColor))
-			detailView := detailStyle.Render(a.detail.View())
-
-			boardContent = lipgloss.JoinHorizontal(lipgloss.Top, boardView, " ", detailView)
+			boardContent = lipgloss.JoinHorizontal(lipgloss.Top, a.board.View(), " ", a.detail.View())
 		} else {
 			// When detail is closed, board uses full width
 			a.board.width = a.width
 			a.board.height = a.height - 10
 			a.board.ResizeColumns()
+			a.board.SetFocus(true)  // board always has focus when detail is closed
 			boardContent = a.board.View()
 		}
 		breadcrumbContent := a.board.RenderBreadcrumb(a.width)

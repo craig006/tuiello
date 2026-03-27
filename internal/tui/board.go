@@ -30,6 +30,7 @@ type BoardModel struct {
 	theme         Theme
 	filter        Filter
 	dimColumns    bool // true when search bar is focused, dims active column border
+	hasFocus      bool // true when board panel has focus, false when detail panel has focus
 }
 
 func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) BoardModel {
@@ -67,6 +68,7 @@ func NewBoardModel(board *trello.Board, cfg config.Config, width, height int) Bo
 		hiddenColumns: map[string]struct{}{},
 		width:         width,
 		height:        height,
+		hasFocus:      true,  // board starts with focus
 		minColWidth:   cfg.GUI.ColumnWidth,
 		padding:       cfg.GUI.Padding,
 		keyMap:        km,
@@ -390,6 +392,11 @@ func (b BoardModel) RenderBreadcrumb(width int) string {
 		Render(breadcrumbText)
 }
 
+// SetFocus sets whether the board panel currently has focus
+func (b *BoardModel) SetFocus(hasFocus bool) {
+	b.hasFocus = hasFocus
+}
+
 func (b BoardModel) View() string {
 	visible := b.VisibleColumnIndices()
 	if len(visible) == 0 {
@@ -415,7 +422,8 @@ func (b BoardModel) View() string {
 		col := b.columns[colIdx]
 
 		borderColor := b.theme.InactiveBorder.GetForeground()
-		if colIdx == b.focused && !b.dimColumns {
+		// Show active border color only if: board has focus AND column is selected AND columns are not dimmed
+		if b.hasFocus && colIdx == b.focused && !b.dimColumns {
 			borderColor = b.theme.ActiveBorder.GetForeground()
 		}
 
