@@ -244,21 +244,22 @@ func TestViewModeRendersComments(t *testing.T) {
 	cl.SetComments(comments)
 
 	view := cl.View()
+	cleanView := stripANSI(view)
 
 	// Check that comments are rendered
-	if !stringContains(view, "User One") {
+	if !stringContains(cleanView, "User One") {
 		t.Error("expected 'User One' in view")
 	}
-	if !stringContains(view, "User Two") {
+	if !stringContains(cleanView, "User Two") {
 		t.Error("expected 'User Two' in view")
 	}
-	if !stringContains(view, "First comment") {
+	if !stringContains(cleanView, "First comment") {
 		t.Error("expected 'First comment' in view")
 	}
-	if !stringContains(view, "Second comment") {
+	if !stringContains(cleanView, "Second comment") {
 		t.Error("expected 'Second comment' in view")
 	}
-	if !stringContains(view, "2026-01-15") {
+	if !stringContains(cleanView, "2026-01-15") {
 		t.Error("expected date '2026-01-15' in view")
 	}
 }
@@ -329,18 +330,19 @@ func TestViewModeShowsSelectionIndicator(t *testing.T) {
 
 	// Select first comment (default)
 	view := cl.View()
+	cleanView := stripANSI(view)
 
 	// Verify the view contains both comments and is properly formatted
-	if !strings.Contains(view, "User One") {
+	if !strings.Contains(cleanView, "User One") {
 		t.Error("expected first comment author in view")
 	}
-	if !strings.Contains(view, "User Two") {
+	if !strings.Contains(cleanView, "User Two") {
 		t.Error("expected second comment author in view")
 	}
-	if !strings.Contains(view, "First comment") {
+	if !strings.Contains(cleanView, "First comment") {
 		t.Error("expected first comment body in view")
 	}
-	if !strings.Contains(view, "Second comment") {
+	if !strings.Contains(cleanView, "Second comment") {
 		t.Error("expected second comment body in view")
 	}
 }
