@@ -6,8 +6,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
-	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/craig006/tuiello/internal/trello"
 )
 
@@ -84,9 +84,9 @@ type CommentsList struct {
 	keyMap   KeyMap
 
 	// State
-	focused        bool
-	loading        bool
-	loadingErr     string
+	focused          bool
+	loading          bool
+	loadingErr       string
 	deleteConfirming bool
 }
 
@@ -183,76 +183,75 @@ func (cl CommentsList) Update(msg tea.Msg) (CommentsList, tea.Cmd) {
 				return cl, nil
 			}
 
+			// Handle autocomplete navigation and selection
+			if cl.autocomplete.Active {
+				switch msg.String() {
+				case "j":
+					if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches)-1 {
+						cl.autocomplete.SelectedIdx++
+					}
+					return cl, nil
+				case "k":
+					if cl.autocomplete.SelectedIdx > 0 {
+						cl.autocomplete.SelectedIdx--
+					}
+					return cl, nil
+				case "enter", "tab":
+					if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches) {
+						member := cl.autocomplete.Matches[cl.autocomplete.SelectedIdx]
+						cl.insertMention(member.Username)
+					}
+					return cl, nil
+				case "esc":
+					cl.autocomplete.Active = false
+					return cl, nil
+				case "backspace":
+					if len(cl.autocomplete.Query) > 0 {
+						cl.autocomplete.Query = cl.autocomplete.Query[:len(cl.autocomplete.Query)-1]
+						cl.filterMembers(cl.autocomplete.Query)
+					} else {
+						// If query is empty, close autocomplete
+						cl.autocomplete.Active = false
+					}
+					return cl, nil
+				}
 
-		// Handle autocomplete navigation and selection
-		if cl.autocomplete.Active {
+				// When autocomplete is active, handle typing to filter
+				keyStr := msg.String()
+				if len(keyStr) > 0 && keyStr != "delete" {
+					// Add to query and filter
+					cl.autocomplete.Query += keyStr
+					cl.filterMembers(cl.autocomplete.Query)
+					return cl, nil
+				}
+
+				return cl, nil
+			}
+
+			// Then handle other special keys when autocomplete is not active
 			switch msg.String() {
-			case "j":
-				if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches)-1 {
-					cl.autocomplete.SelectedIdx++
+			case "enter":
+				text := cl.textInput.Value()
+				if strings.TrimSpace(text) == "" {
+					return cl, nil // Ignore empty submissions
 				}
-				return cl, nil
-			case "k":
-				if cl.autocomplete.SelectedIdx > 0 {
-					cl.autocomplete.SelectedIdx--
-				}
-				return cl, nil
-			case "enter", "tab":
-				if cl.autocomplete.SelectedIdx < len(cl.autocomplete.Matches) {
-					member := cl.autocomplete.Matches[cl.autocomplete.SelectedIdx]
-					cl.insertMention(member.Username)
-				}
-				return cl, nil
+				return cl, cl.submitComment()
 			case "esc":
+				cl.mode = CommentModeView
+				cl.textInput.SetValue("")
+				cl.textInput.Blur()
 				cl.autocomplete.Active = false
 				return cl, nil
-			case "backspace":
-				if len(cl.autocomplete.Query) > 0 {
-					cl.autocomplete.Query = cl.autocomplete.Query[:len(cl.autocomplete.Query)-1]
-					cl.filterMembers(cl.autocomplete.Query)
-				} else {
-					// If query is empty, close autocomplete
-					cl.autocomplete.Active = false
-				}
-				return cl, nil
 			}
 
-			// When autocomplete is active, handle typing to filter
-			keyStr := msg.String()
-			if len(keyStr) > 0 && keyStr != "delete" {
-				// Add to query and filter
-				cl.autocomplete.Query += keyStr
-				cl.filterMembers(cl.autocomplete.Query)
-				return cl, nil
-			}
-
-			return cl, nil
+			// Normal text input when not in autocomplete
+			var cmd tea.Cmd
+			cl.textInput, cmd = cl.textInput.Update(msg)
+			return cl, cmd
 		}
 
-		// Then handle other special keys when autocomplete is not active
-		switch msg.String() {
-		case "enter":
-			text := cl.textInput.Value()
-			if strings.TrimSpace(text) == "" {
-				return cl, nil // Ignore empty submissions
-			}
-			return cl, cl.submitComment()
-		case "esc":
-			cl.mode = CommentModeView
-			cl.textInput.SetValue("")
-			cl.textInput.Blur()
-			cl.autocomplete.Active = false
-			return cl, nil
-		}
-
-		// Normal text input when not in autocomplete
-		var cmd tea.Cmd
-		cl.textInput, cmd = cl.textInput.Update(msg)
-		return cl, cmd
-	}
-
-	// Only handle navigation keys in View mode
-	if cl.mode == CommentModeView {
+		// Only handle navigation keys in View mode
+		if cl.mode == CommentModeView {
 			switch {
 			case key.Matches(msg, cl.keyMap.MoveDown):
 				if cl.selectedIdx < len(cl.comments)-1 {
@@ -331,7 +330,6 @@ func (cl CommentsList) renderViewMode() string {
 
 	// Build comment blocks
 	var blocks []string
-	selBg := lipgloss.Color("236") // subtle dark grey highlight
 
 	for i, comment := range cl.comments {
 		isSelected := i == cl.selectedIdx
@@ -340,20 +338,24 @@ func (cl CommentsList) renderViewMode() string {
 		dateStr := comment.Date.Format("2006-01-02 15:04:05")
 		header := comment.Author.FullName + " (" + dateStr + ")"
 
-		// Body with word wrap - account for padding
-		body := wordWrap(comment.Body, cl.width-4)
+		// Body with markdown rendering
+		body := renderMarkdown(comment.Body, cl.width-4)
 
-		// Build lines for this comment (unrendered strings)
+		// Build lines for this comment
 		var lines []string
 		lines = append(lines, header)
-		for _, line := range strings.Split(body, "\n") {
-			lines = append(lines, line)
-		}
+		lines = append(lines, body)
 
-		// Add action shortcuts for selected comments
+		// Add action line (always present, but only shows shortcuts when selected and editable)
 		if isSelected && comment.Editable {
+			// Format actions with cyan color for action names and keys
+			cyanStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(6))
+			actionLine := cyanStyle.Render("Edit") + " " + cyanStyle.Render("[e]") + " " +
+				cyanStyle.Render("Delete") + " " + cyanStyle.Render("[d]")
+			lines = append(lines, actionLine)
+		} else {
+			// Empty action line for unselected comments
 			lines = append(lines, "")
-			lines = append(lines, "Edit (e) | Delete (d)")
 		}
 
 		// Join all lines
@@ -361,27 +363,21 @@ func (cl CommentsList) renderViewMode() string {
 
 		// Apply styling to the entire block
 		if isSelected {
-			// Selected: blue left bar + background
-			// Use PaddingLeft to push content right, border overlays it
+			// Selected: blue left bar only
 			selBorder := lipgloss.Border{Left: "▎"}
 			style := lipgloss.NewStyle().
-				Background(selBg).
-				Foreground(lipgloss.ANSIColor(15)).
 				Width(cl.width).
 				BorderLeft(true).
 				BorderStyle(selBorder).
 				BorderForeground(lipgloss.ANSIColor(4)).
-				BorderBackground(selBg).
-				Padding(0, 1, 0, 0). // right=1, top=0, bottom=0, left=0
+				Padding(0, 1, 0, 0). // right=1, top=0, bottom=0, left=0 - border takes up space
 				MarginLeft(0)
 			blocks = append(blocks, style.Render(commentContent))
 		} else {
-			// Unfocused: reserve space with padding to align with selected
-			// 2 chars padding to reserve space for border width
+			// Unfocused: reserve space for where border appears on selected
 			style := lipgloss.NewStyle().
-				Foreground(lipgloss.ANSIColor(7)).
 				Width(cl.width).
-				Padding(0, 1, 0, 2). // right=1, top=0, bottom=0, left=2
+				Padding(0, 1, 0, 1). // right=1, top=0, bottom=0, left=1 - reserve space for border
 				MarginLeft(0)
 			blocks = append(blocks, style.Render(commentContent))
 		}
@@ -483,6 +479,13 @@ func (cl *CommentsList) SetFocus(focused bool) {
 	} else {
 		cl.textInput.Blur()
 	}
+}
+
+// HandleKeyEvent processes keyboard events for comments
+// Returns true if handled, false to bubble up
+func (cl *CommentsList) HandleKeyEvent(key string) bool {
+	// Comment navigation and editing remain in app.go for now
+	return false
 }
 
 // submitComment generates a message for creating or updating a comment
