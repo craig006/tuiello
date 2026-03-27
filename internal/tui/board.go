@@ -397,6 +397,15 @@ func (b *BoardModel) SetFocus(hasFocus bool) {
 	b.hasFocus = hasFocus
 }
 
+// HandleKeyEvent processes keyboard events for the board section
+// Returns true if handled, false to bubble up to app
+func (b *BoardModel) HandleKeyEvent(key string) bool {
+	// For now, board doesn't handle any keys directly
+	// All board navigation stays in app.go until we refactor further
+	// This method is here to satisfy the KeyHandler interface
+	return false
+}
+
 func (b BoardModel) View() string {
 	visible := b.VisibleColumnIndices()
 	if len(visible) == 0 {
