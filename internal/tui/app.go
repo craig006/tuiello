@@ -451,6 +451,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.pendingCommand = nil
 					a.showPrompt = false
 					a.showPalette = false
+				a.focusManager.CloseModal()
 					a.status = "Cancelled"
 					return a, nil
 				}
@@ -460,6 +461,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						a.promptIdx++
 						a.showPrompt = false
 						a.showPalette = false
+				a.focusManager.CloseModal()
 						return a.showNextPrompt()
 					}
 				}
@@ -473,11 +475,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.showPalette {
 			if msg.String() == "esc" {
 				a.showPalette = false
+				a.focusManager.CloseModal()
 				return a, nil
 			}
 			if msg.String() == "enter" {
 				if item, ok := a.commandPalette.SelectedItem().(commandItem); ok {
 					a.showPalette = false
+					a.focusManager.CloseModal()
 					return a.executeCustomCommand(item.cmd)
 				}
 			}
@@ -515,6 +519,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.board.ApplyFilter(currentFilter)
 				a.showMemberModal = false
 				a.showLabelModal = false
+			a.focusManager.CloseModal()
 				fetchCmd := a.syncDetailAfterFilter()
 				return a, fetchCmd
 			}
@@ -616,6 +621,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.commandPalette.SetItems(items)
 				a.commandPalette.SetFilteringEnabled(true)
 				a.showPalette = true
+			a.focusManager.OpenModal()
 				return a, nil
 			}
 
@@ -760,6 +766,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				a.memberModal = NewMultiSelectModel("Filter by Member", items)
 				a.showMemberModal = true
+			a.focusManager.OpenModal()
 				return a, nil
 			}
 
@@ -802,6 +809,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				a.labelModal = NewMultiSelectModel("Filter by Label", items)
 				a.showLabelModal = true
+			a.focusManager.OpenModal()
 				return a, nil
 			}
 
@@ -1228,6 +1236,7 @@ func (a App) showNextPrompt() (tea.Model, tea.Cmd) {
 		}
 		a.commandPalette.SetItems(items)
 		a.showPalette = true
+	a.focusManager.OpenModal()
 	}
 
 	return a, nil
