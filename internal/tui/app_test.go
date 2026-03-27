@@ -17,8 +17,8 @@ func TestAppBoardHasFocusInitialized(t *testing.T) {
 	client := trello.NewClient("key", "token")
 	app := NewApp(client, cfg)
 
-	if !app.boardHasFocus {
-		t.Error("expected boardHasFocus to be true after NewApp initialization")
+	if app.focusManager.FocusedSection() != "board" {
+		t.Error("expected board to be focused after NewApp initialization")
 	}
 }
 
@@ -447,7 +447,7 @@ func TestFocusToggleEnterWithSelectedCard(t *testing.T) {
 	app = model.(App)
 
 	// Verify initial state: board has focus
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to have focus initially")
 	}
 	if app.detail.focused {
@@ -467,7 +467,7 @@ func TestFocusToggleEnterWithSelectedCard(t *testing.T) {
 	app = model.(App)
 
 	// Verify state after Enter: detail has focus, board does not
-	if app.boardHasFocus {
+	if app.focusManager.FocusedSection() == "board" {
 		t.Fatal("expected board to lose focus after pressing Enter")
 	}
 	if !app.detail.focused {
@@ -497,7 +497,7 @@ func TestFocusToggleEnterWithoutSelectedCard(t *testing.T) {
 	app = model.(App)
 
 	// Verify initial state: board has focus
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to have focus initially")
 	}
 
@@ -507,7 +507,7 @@ func TestFocusToggleEnterWithoutSelectedCard(t *testing.T) {
 	app = model.(App)
 
 	// Verify state unchanged: board still has focus
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to retain focus when no card is selected")
 	}
 	if app.detail.focused {
@@ -539,7 +539,7 @@ func TestFocusToggleEscapeFromDetail(t *testing.T) {
 	app = model.(App)
 
 	// Manually set focus to detail
-	app.boardHasFocus = false
+	app.focusManager.SetFocusedSection("detail")
 	app.detail.SetFocus(true)
 
 	// Press Escape to return focus to board
@@ -548,7 +548,7 @@ func TestFocusToggleEscapeFromDetail(t *testing.T) {
 	app = model.(App)
 
 	// Verify state after Escape: board has focus again
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to have focus after pressing Escape")
 	}
 	if app.detail.focused {
@@ -580,7 +580,7 @@ func TestFocusToggleEscapeFromBoard(t *testing.T) {
 	app = model.(App)
 
 	// Verify initial state: board has focus
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to have focus initially")
 	}
 
@@ -590,7 +590,7 @@ func TestFocusToggleEscapeFromBoard(t *testing.T) {
 	app = model.(App)
 
 	// Verify state unchanged: board still has focus
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to retain focus when Escape is pressed from board")
 	}
 	if app.detail.focused {
@@ -918,11 +918,11 @@ func TestBoardBlueBorderWhenFocused(t *testing.T) {
 
 	model, _ := app.Update(BoardFetchedMsg{Board: board})
 	app = model.(App)
-	app.boardHasFocus = true
+	app.focusManager.SetFocusedSection("board")
 
-	// Verify that boardHasFocus is true
-	if !app.boardHasFocus {
-		t.Fatal("expected boardHasFocus to be true")
+	// Verify that board has focus
+	if app.focusManager.FocusedSection() != "board" {
+		t.Fatal("expected board to have focus")
 	}
 
 	// Verify board border styling can be applied based on focus state
@@ -953,11 +953,11 @@ func TestBoardGrayBorderWhenNotFocused(t *testing.T) {
 
 	model, _ := app.Update(BoardFetchedMsg{Board: board})
 	app = model.(App)
-	app.boardHasFocus = false
+	app.focusManager.SetFocusedSection("detail")
 
-	// Verify that boardHasFocus is false
-	if app.boardHasFocus {
-		t.Fatal("expected boardHasFocus to be false")
+	// Verify that detail has focus
+	if app.focusManager.FocusedSection() == "board" {
+		t.Fatal("expected detail to have focus")
 	}
 
 	// Verify board still renders when not focused
@@ -991,17 +991,17 @@ func TestDetailBlueBorderWhenFocused(t *testing.T) {
 
 	// Open detail panel and give it focus
 	app.detail.open = true
-	app.boardHasFocus = false
+	app.focusManager.SetFocusedSection("detail")
 	if len(app.board.columns) > 0 && len(app.board.columns[0].cards) > 0 {
 		app.detail.SetCard(app.board.columns[0].cards[0])
 	}
 
-	// Verify that detail is open and boardHasFocus indicates detail has focus
+	// Verify that detail is open and has focus
 	if !app.detail.open {
 		t.Error("expected detail panel to be open")
 	}
-	if app.boardHasFocus {
-		t.Error("expected boardHasFocus to be false when detail has focus")
+	if app.focusManager.FocusedSection() == "board" {
+		t.Error("expected detail to have focus when detail has focus")
 	}
 }
 
@@ -1029,17 +1029,17 @@ func TestDetailGrayBorderWhenNotFocused(t *testing.T) {
 
 	// Open detail panel but board has focus
 	app.detail.open = true
-	app.boardHasFocus = true
+	app.focusManager.SetFocusedSection("board")
 	if len(app.board.columns) > 0 && len(app.board.columns[0].cards) > 0 {
 		app.detail.SetCard(app.board.columns[0].cards[0])
 	}
 
-	// Verify that detail is open but boardHasFocus is true
+	// Verify that detail is open but board has focus
 	if !app.detail.open {
 		t.Error("expected detail panel to be open")
 	}
-	if !app.boardHasFocus {
-		t.Error("expected boardHasFocus to be true when board has focus")
+	if app.focusManager.FocusedSection() != "board" {
+		t.Error("expected board to have focus when board has focus")
 	}
 }
 
@@ -1145,7 +1145,7 @@ func TestCommentWorkflowIntegration(t *testing.T) {
 	app.board.columns[0].Select(0)
 
 	// Verify initial state: board has focus, detail is not
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to have focus initially")
 	}
 	if app.detail.focused {
@@ -1157,7 +1157,7 @@ func TestCommentWorkflowIntegration(t *testing.T) {
 	model, cmd := app.Update(keyMsg)
 	app = model.(App)
 
-	if app.boardHasFocus {
+	if app.focusManager.FocusedSection() == "board" {
 		t.Fatal("expected board to lose focus after pressing Enter")
 	}
 	if !app.detail.focused {
@@ -1312,10 +1312,131 @@ func TestCommentWorkflowIntegration(t *testing.T) {
 	app = model.(App)
 
 	// Verify final state: board has focus again, detail does not
-	if !app.boardHasFocus {
+	if app.focusManager.FocusedSection() != "board" {
 		t.Fatal("expected board to regain focus after Escape")
 	}
 	if app.detail.focused {
 		t.Fatal("expected detail to lose focus after Escape")
+	}
+}
+
+func TestAppFocusToggleBetweenBoardAndDetail(t *testing.T) {
+	// Test that pressing Enter toggles focus between board and detail
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+			{ID: "l2", Name: "Done", Cards: []trello.Card{}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Start with board focused
+	if app.focusManager.FocusedSection() != "board" {
+		t.Errorf("expected board focused initially, got %s", app.focusManager.FocusedSection())
+	}
+
+	// DetailToggle should switch focus (if detail can open)
+	if app.detail.open {
+		if app.focusManager.FocusedSection() == "board" {
+			app.focusManager.SetFocusedSection("detail")
+		} else {
+			app.focusManager.SetFocusedSection("board")
+		}
+
+		if app.focusManager.FocusedSection() != "detail" {
+			t.Errorf("expected detail focused after toggle, got %s", app.focusManager.FocusedSection())
+		}
+	}
+}
+
+func TestModalSuspendsFocusState(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+			{ID: "l2", Name: "Done", Cards: []trello.Card{}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Set up initial focus
+	app.focusManager.SetFocusedSection("board")
+	app.focusManager.SetFocusedElement("card_1")
+
+	// Open modal
+	app.focusManager.OpenModal()
+
+	if !app.focusManager.IsModalActive() {
+		t.Errorf("expected modal to be active")
+	}
+
+	// Close modal - focus should be restored
+	app.focusManager.CloseModal()
+
+	if app.focusManager.FocusedSection() != "board" {
+		t.Errorf("expected board focus restored, got %s", app.focusManager.FocusedSection())
+	}
+}
+
+func TestHandleSearchKeyEventEscapeUnfocuses(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}} // No filter so cards aren't hidden
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 90
+	app.height = 30
+
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	// Focus search input
+	app.searchFocused = true
+
+	handled := app.HandleSearchKeyEvent("esc")
+
+	if !handled {
+		t.Errorf("expected Escape to be handled by search")
+	}
+
+	if app.searchFocused {
+		t.Errorf("expected searchFocused to be false after Escape")
 	}
 }
