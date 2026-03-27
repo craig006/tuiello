@@ -8,9 +8,11 @@ A TUI client for Trello.
 
 - Kanban board view with sliding column window
 - Detail panel with comments and checklists
+- **Interactive Comments** — Create, edit, and delete comments on cards with @mention autocomplete
 - Views — named filter presets with keyboard shortcuts
 - Search and filter by member, label, or text
 - Custom commands with templated shell execution
+- **Focus Management** — Press Enter to focus detail panel, Esc to return to board
 - Vim-style navigation
 - Configurable keybindings and theming
 
@@ -124,22 +126,30 @@ keybinding:
 
 ## Keybindings
 
-| Key | Action |
-|-----|--------|
-| `h` / `l` | Move between columns |
-| `j` / `k` | Move between cards |
-| `H` / `L` | Move card to adjacent column |
-| `J` / `K` | Move card up/down in column |
-| `d` | Toggle detail panel |
-| `[` / `]` | Detail panel: previous/next tab |
-| `Ctrl+j` / `Ctrl+k` | Detail panel: scroll down/up |
-| `/` | Focus search bar |
-| `Ctrl+m` | Filter by member (multi-select) |
-| `Ctrl+l` | Filter by label (multi-select) |
-| `v` / `V` | Next/previous view |
-| `x` | Custom commands |
-| `r` | Refresh board |
-| `q` | Quit |
+| Key | Action | Context |
+|-----|--------|---------|
+| `h` / `l` | Move between columns | Board |
+| `j` / `k` | Move between cards | Board |
+| `H` / `L` | Move card to adjacent column | Board with card selected |
+| `J` / `K` | Move card up/down in column | Board with card selected |
+| `enter` | Focus detail panel | Board with card selected |
+| `esc` | Focus board | Detail panel active |
+| `d` | Toggle detail panel | Board |
+| `[` / `]` | Detail panel: previous/next tab | Detail panel active |
+| `Ctrl+j` / `Ctrl+k` | Detail panel: scroll down/up | Detail panel active |
+| `j` / `k` | Navigate comments | Detail (Comments tab active) |
+| `c` | Create comment | Detail (Comments tab active, View mode) |
+| `e` | Edit comment | Detail (Comments tab active, View mode) |
+| `d` | Delete comment | Detail (Comments tab active, View mode) |
+| `@` | Mention user (in comment) | Creating/editing comment |
+| `Tab` / `Enter` | Select mention | Autocomplete popup active |
+| `/` | Focus search bar | Board |
+| `Ctrl+m` | Filter by member (multi-select) | Board |
+| `Ctrl+l` | Filter by label (multi-select) | Board |
+| `v` / `V` | Next/previous view | Board |
+| `x` | Custom commands | Board |
+| `r` | Refresh board | Board |
+| `q` | Quit | Universal |
 
 ## License
 
