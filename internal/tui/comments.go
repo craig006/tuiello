@@ -328,9 +328,11 @@ func (cl CommentsList) renderViewMode() string {
 			Render("No comments. Press 'c' to create.")
 	}
 
-	// Build comment list
-	var lines []string
+	// Build comment blocks
+	var blocks []string
 	for i, comment := range cl.comments {
+		isSelected := i == cl.selectedIdx
+
 		// Format: "Author Name (YYYY-MM-DD)"
 		dateStr := comment.Date.Format("2006-01-02")
 		header := lipgloss.NewStyle().
@@ -344,23 +346,46 @@ func (cl CommentsList) renderViewMode() string {
 		// Body with word wrap
 		body := wordWrap(comment.Body, cl.width-4)
 
-		// Selection indicator (blue bar on left)
-		indicator := " "
-		if i == cl.selectedIdx {
-			indicator = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("4")).
-				Render("│")
+		// Build comment content
+		var commentLines []string
+		commentLines = append(commentLines, header)
+		for _, line := range strings.Split(body, "\n") {
+			commentLines = append(commentLines, line)
+		}
+		commentContent := strings.Join(commentLines, "\n")
+
+		// Style the comment block
+		if isSelected {
+			// Selected comment: blue left bar + subtle background
+			selBg := lipgloss.Color("236") // subtle dark grey highlight
+			selBorder := lipgloss.Border{Left: "▎"}
+			style := lipgloss.NewStyle().
+				Background(selBg).
+				Foreground(lipgloss.ANSIColor(15)).
+				Width(cl.width).
+				BorderLeft(true).
+				BorderStyle(selBorder).
+				BorderForeground(lipgloss.ANSIColor(4)).
+				BorderBackground(selBg).
+				Padding(0, 1)
+			blocks = append(blocks, style.Render(commentContent))
+		} else {
+			// Unfocused comment: no bar, normal styling
+			style := lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(7)).
+				Width(cl.width).
+				Padding(0, 1)
+			blocks = append(blocks, style.Render(commentContent))
 		}
 
-		lines = append(lines, indicator+" "+header)
-		for _, line := range strings.Split(body, "\n") {
-			lines = append(lines, "│ "+line)
+		// Add empty line between comments (but not after the last one)
+		if i < len(cl.comments)-1 {
+			blocks = append(blocks, "")
 		}
-		lines = append(lines, "├"+strings.Repeat("─", cl.width-2))
 	}
 
 	// Render through viewport
-	content := strings.Join(lines, "\n")
+	content := strings.Join(blocks, "\n")
 	cl.viewport.SetContent(content)
 
 	// Add footer
