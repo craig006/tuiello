@@ -106,6 +106,14 @@ func (d *DetailModel) SetFocus(focused bool) {
 	}
 }
 
+// HandleKeyEvent processes keyboard events for the detail panel
+// Returns true if handled, false to bubble up
+func (d *DetailModel) HandleKeyEvent(key string) bool {
+	// Detail panel doesn't handle navigation directly yet
+	// Tab switching and scrolling remain in app.go
+	return false
+}
+
 // SetCard updates the displayed card and clears cached data.
 // After calling SetCard, check NeedsFetch() to determine if a fetch command is needed.
 func (d *DetailModel) SetCard(card trello.Card) {
