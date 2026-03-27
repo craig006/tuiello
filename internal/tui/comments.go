@@ -305,8 +305,9 @@ func (cl CommentsList) View() string {
 				Bold(true).
 				Render("Delete comment? (y/n)")
 
+			dateStr := comment.Date.Format("2006-01-02 15:04:05")
 			body := wordWrap(comment.Body, cl.width-4)
-			return comment.Author.FullName + "\n" + body + "\n\n" + prompt
+			return comment.Author.FullName + " (" + dateStr + ")\n" + body + "\n\n" + prompt
 		}
 	}
 
@@ -333,8 +334,8 @@ func (cl CommentsList) renderViewMode() string {
 	for i, comment := range cl.comments {
 		isSelected := i == cl.selectedIdx
 
-		// Format: "Author Name (YYYY-MM-DD)"
-		dateStr := comment.Date.Format("2006-01-02")
+		// Format: "Author Name (YYYY-MM-DD HH:MM:SS)"
+		dateStr := comment.Date.Format("2006-01-02 15:04:05")
 		header := lipgloss.NewStyle().
 			Bold(true).
 			Render(comment.Author.FullName) +
@@ -344,7 +345,7 @@ func (cl CommentsList) renderViewMode() string {
 				Render("(" + dateStr + ")")
 
 		// Body with word wrap
-		body := wordWrap(comment.Body, cl.width-4)
+		body := wordWrap(comment.Body, cl.width-6) // Account for padding
 
 		// Build comment content
 		var commentLines []string
@@ -352,13 +353,24 @@ func (cl CommentsList) renderViewMode() string {
 		for _, line := range strings.Split(body, "\n") {
 			commentLines = append(commentLines, line)
 		}
+
+		// Add action shortcuts for selected comments
+		if isSelected && comment.Editable {
+			commentLines = append(commentLines, "")
+			actions := lipgloss.NewStyle().
+				Foreground(lipgloss.ANSIColor(6)).
+				Render("Edit (e) | Delete (d)")
+			commentLines = append(commentLines, actions)
+		}
+
 		commentContent := strings.Join(commentLines, "\n")
 
-		// Style the comment block
+		// Style the comment block - always reserve space for border
+		selBg := lipgloss.Color("236") // subtle dark grey highlight
+		selBorder := lipgloss.Border{Left: "▎"}
+
 		if isSelected {
 			// Selected comment: blue left bar + subtle background
-			selBg := lipgloss.Color("236") // subtle dark grey highlight
-			selBorder := lipgloss.Border{Left: "▎"}
 			style := lipgloss.NewStyle().
 				Background(selBg).
 				Foreground(lipgloss.ANSIColor(15)).
@@ -370,10 +382,13 @@ func (cl CommentsList) renderViewMode() string {
 				Padding(0, 1)
 			blocks = append(blocks, style.Render(commentContent))
 		} else {
-			// Unfocused comment: no bar, normal styling
+			// Unfocused comment: reserve space (no visible border but same padding)
 			style := lipgloss.NewStyle().
 				Foreground(lipgloss.ANSIColor(7)).
 				Width(cl.width).
+				BorderLeft(true).
+				BorderStyle(selBorder).
+				BorderForeground(selBg). // Invisible - same as background
 				Padding(0, 1)
 			blocks = append(blocks, style.Render(commentContent))
 		}
@@ -407,7 +422,7 @@ func (cl CommentsList) renderEditMode() string {
 		Bold(true).
 		Render("[Edit Comment]")
 
-	authorStr := comment.Author.FullName + " (" + comment.Date.Format("2006-01-02") + ")"
+	authorStr := comment.Author.FullName + " (" + comment.Date.Format("2006-01-02 15:04:05") + ")"
 
 	inputBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
