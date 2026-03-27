@@ -1107,3 +1107,215 @@ func TestDetailWidthManagementWhenOpen(t *testing.T) {
 		t.Errorf("expected detail width %d, got %d", expectedDetailWidth, app.detail.width)
 	}
 }
+
+// TestCommentWorkflowIntegration tests the full end-to-end comment workflow:
+// focus toggle → create → edit → delete → unfocus
+func TestCommentWorkflowIntegration(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Board.ID = "board1"
+	cfg.Views = []config.ViewConfig{{Title: "All Cards"}}
+	client := trello.NewClient("key", "token")
+	app := NewApp(client, cfg)
+	app.width = 120
+	app.height = 30
+
+	// Setup board with a card
+	board := &trello.Board{
+		ID:   "board1",
+		Name: "Test Board",
+		Lists: []trello.List{
+			{ID: "l1", Name: "Todo", Cards: []trello.Card{
+				{ID: "c1", Name: "Card 1", Pos: 1.0, ListID: "l1"},
+			}},
+		},
+	}
+
+	// Load board
+	model, _ := app.Update(BoardFetchedMsg{Board: board})
+	app = model.(App)
+
+	if !app.boardReady {
+		t.Fatal("expected boardReady to be true after BoardFetchedMsg")
+	}
+
+	// Ensure a card is selected
+	if len(app.board.columns) == 0 || len(app.board.columns[0].cards) == 0 {
+		t.Fatal("expected board to have at least one card")
+	}
+	app.board.columns[0].Select(0)
+
+	// Verify initial state: board has focus, detail is not
+	if !app.boardHasFocus {
+		t.Fatal("expected board to have focus initially")
+	}
+	if app.detail.focused {
+		t.Fatal("expected detail to not have focus initially")
+	}
+
+	// STEP 1: Focus detail via Enter key
+	keyMsg := tea.KeyPressMsg{Code: tea.KeyEnter}
+	model, cmd := app.Update(keyMsg)
+	app = model.(App)
+
+	if app.boardHasFocus {
+		t.Fatal("expected board to lose focus after pressing Enter")
+	}
+	if !app.detail.focused {
+		t.Fatal("expected detail to have focus after pressing Enter")
+	}
+	if !app.detail.open {
+		t.Fatal("expected detail to be open after pressing Enter")
+	}
+
+	// STEP 2: Create comment
+	// First we need to navigate to Comments tab (press Tab or use NextTab)
+	app.detail.NextTab() // Move to Comments tab
+	if app.detail.tab != 1 {
+		t.Fatalf("expected detail.tab to be 1 (Comments), got %d", app.detail.tab)
+	}
+
+	// SetFocus is needed again to update commentsList.focused since we changed tabs
+	app.detail.SetFocus(true)
+	if !app.detail.commentsList.focused {
+		t.Fatal("expected commentsList to be focused after changing to Comments tab")
+	}
+
+	// Enter create mode and submit a comment
+	app.detail.commentsList.mode = CommentModeCreate
+	app.detail.commentsList.textInput.Focus()
+	app.detail.commentsList.textInput.SetValue("Hello")
+
+	// Submit the comment
+	cmd = app.detail.commentsList.submitComment()
+	if cmd == nil {
+		t.Fatal("expected Create comment to return a command")
+	}
+	submitMsg := cmd()
+	createReqMsg, ok := submitMsg.(CreateCommentRequestMsg)
+	if !ok {
+		t.Fatalf("expected CreateCommentRequestMsg, got %T", submitMsg)
+	}
+	if createReqMsg.Text != "Hello" {
+		t.Fatalf("expected comment text 'Hello', got %q", createReqMsg.Text)
+	}
+
+	// Simulate API response: CommentCreatedMsg
+	newComment := trello.Comment{
+		ID:       "comment1",
+		Body:     "Hello",
+		Author:   trello.Member{FullName: "Test User"},
+		Editable: true,
+	}
+	// Send the CommentCreatedMsg to the commentsList (simulating API response)
+	updated, _ := app.detail.commentsList.Update(CommentCreatedMsg{Comment: newComment})
+	app.detail.commentsList = &updated
+
+	// Verify comment was added to the comments list
+	if len(app.detail.commentsList.comments) == 0 {
+		t.Fatal("expected comment to be added to comments list")
+	}
+	addedComment := app.detail.commentsList.comments[0]
+	if addedComment.ID != "comment1" || addedComment.Body != "Hello" {
+		t.Fatalf("expected comment with ID 'comment1' and Body 'Hello', got ID %q Body %q",
+			addedComment.ID, addedComment.Body)
+	}
+
+	// STEP 3: Edit comment
+	// Ensure we're back in view mode and have the comment selected
+	app.detail.commentsList.mode = CommentModeView
+	app.detail.commentsList.selectedIdx = 0
+	if len(app.detail.commentsList.comments) == 0 {
+		t.Fatal("expected at least one comment in the list")
+	}
+
+	// Enter edit mode for the first comment
+	comment := app.detail.commentsList.comments[0]
+	if !comment.Editable {
+		t.Fatal("expected comment to be editable")
+	}
+
+	app.detail.commentsList.mode = CommentModeEdit
+	app.detail.commentsList.editingIdx = 0
+	app.detail.commentsList.textInput.Focus()
+	app.detail.commentsList.textInput.SetValue("Updated")
+
+	// Submit the edit
+	cmd = app.detail.commentsList.submitComment()
+	if cmd == nil {
+		t.Fatal("expected Edit comment to return a command")
+	}
+	submitMsg = cmd()
+	updateReqMsg, ok := submitMsg.(UpdateCommentRequestMsg)
+	if !ok {
+		t.Fatalf("expected UpdateCommentRequestMsg, got %T", submitMsg)
+	}
+	if updateReqMsg.Text != "Updated" {
+		t.Fatalf("expected comment text 'Updated', got %q", updateReqMsg.Text)
+	}
+
+	// Simulate API response: CommentUpdatedMsg
+	updatedComment := trello.Comment{
+		ID:       "comment1",
+		Body:     "Updated",
+		Author:   trello.Member{FullName: "Test User"},
+		Editable: true,
+	}
+	// Send the CommentUpdatedMsg to the commentsList
+	updated2, _ := app.detail.commentsList.Update(CommentUpdatedMsg{Comment: updatedComment})
+	app.detail.commentsList = &updated2
+
+	// Verify comment was updated
+	if len(app.detail.commentsList.comments) == 0 {
+		t.Fatal("expected comment list to still have comments")
+	}
+	updatedStoredComment := app.detail.commentsList.comments[0]
+	if updatedStoredComment.Body != "Updated" {
+		t.Fatalf("expected comment body to be 'Updated', got %q", updatedStoredComment.Body)
+	}
+
+	// STEP 4: Delete comment
+	// Return to view mode and select the comment
+	app.detail.commentsList.mode = CommentModeView
+	app.detail.commentsList.selectedIdx = 0
+	if len(app.detail.commentsList.comments) == 0 {
+		t.Fatal("expected at least one comment to delete")
+	}
+
+	// Delete the comment
+	comment = app.detail.commentsList.comments[0]
+	cmd = app.detail.commentsList.deleteComment(comment.ID)
+	if cmd == nil {
+		t.Fatal("expected Delete comment to return a command")
+	}
+	submitMsg = cmd()
+	deleteReqMsg, ok := submitMsg.(DeleteCommentRequestMsg)
+	if !ok {
+		t.Fatalf("expected DeleteCommentRequestMsg, got %T", submitMsg)
+	}
+	if deleteReqMsg.CommentID != "comment1" {
+		t.Fatalf("expected comment ID 'comment1', got %q", deleteReqMsg.CommentID)
+	}
+
+	// Simulate API response: CommentDeletedMsg
+	updated3, _ := app.detail.commentsList.Update(CommentDeletedMsg{CommentID: "comment1"})
+	app.detail.commentsList = &updated3
+
+	// Verify comment was deleted
+	if len(app.detail.commentsList.comments) != 0 {
+		t.Fatalf("expected comments list to be empty after deletion, got %d comments",
+			len(app.detail.commentsList.comments))
+	}
+
+	// STEP 5: Unfocus detail via Escape key
+	keyMsg = tea.KeyPressMsg{Code: tea.KeyEscape}
+	model, _ = app.Update(keyMsg)
+	app = model.(App)
+
+	// Verify final state: board has focus again, detail does not
+	if !app.boardHasFocus {
+		t.Fatal("expected board to regain focus after Escape")
+	}
+	if app.detail.focused {
+		t.Fatal("expected detail to lose focus after Escape")
+	}
+}
