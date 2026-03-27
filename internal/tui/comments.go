@@ -336,39 +336,16 @@ func (cl CommentsList) renderViewMode() string {
 	for i, comment := range cl.comments {
 		isSelected := i == cl.selectedIdx
 
-		// Build lines for this comment
-		var lines []string
-
 		// Format: "Author Name (YYYY-MM-DD HH:MM:SS)"
 		dateStr := comment.Date.Format("2006-01-02 15:04:05")
+		header := comment.Author.FullName + " (" + dateStr + ")"
 
-		if isSelected {
-			// Selected: apply background to header
-			nameStyle := lipgloss.NewStyle().
-				Bold(true).
-				Background(selBg).
-				Foreground(lipgloss.ANSIColor(15))
-			dateStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.ANSIColor(8)).
-				Background(selBg)
-			header := nameStyle.Render(comment.Author.FullName) +
-				" " +
-				dateStyle.Render("("+dateStr+")")
-			lines = append(lines, header)
-		} else {
-			// Unfocused: normal styling
-			nameStyle := lipgloss.NewStyle().Bold(true)
-			dateStyle := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))
-			header := nameStyle.Render(comment.Author.FullName) +
-				" " +
-				dateStyle.Render("("+dateStr+")")
-			lines = append(lines, header)
-		}
+		// Body with word wrap - account for padding
+		body := wordWrap(comment.Body, cl.width-4)
 
-		// Body with word wrap
-		body := wordWrap(comment.Body, cl.width-6) // Account for padding
-
-		// Add body lines
+		// Build lines for this comment (unrendered strings)
+		var lines []string
+		lines = append(lines, header)
 		for _, line := range strings.Split(body, "\n") {
 			lines = append(lines, line)
 		}
@@ -382,9 +359,10 @@ func (cl CommentsList) renderViewMode() string {
 		// Join all lines
 		commentContent := strings.Join(lines, "\n")
 
-		// Style the comment block
+		// Apply styling to the entire block
 		if isSelected {
-			// Selected: blue left bar + background + foreground
+			// Selected: blue left bar + background
+			// Use PaddingLeft to push content right, border overlays it
 			selBorder := lipgloss.Border{Left: "▎"}
 			style := lipgloss.NewStyle().
 				Background(selBg).
@@ -394,16 +372,17 @@ func (cl CommentsList) renderViewMode() string {
 				BorderStyle(selBorder).
 				BorderForeground(lipgloss.ANSIColor(4)).
 				BorderBackground(selBg).
-				PaddingLeft(1).
-				PaddingRight(1)
+				Padding(0, 1, 0, 0). // right=1, top=0, bottom=0, left=0
+				MarginLeft(0)
 			blocks = append(blocks, style.Render(commentContent))
 		} else {
-			// Unfocused: reserve space with padding (no visible border)
+			// Unfocused: reserve space with padding to align with selected
+			// 2 chars padding to reserve space for border width
 			style := lipgloss.NewStyle().
 				Foreground(lipgloss.ANSIColor(7)).
 				Width(cl.width).
-				PaddingLeft(3). // 3 chars to match border + padding width (▎ + space)
-				PaddingRight(1)
+				Padding(0, 1, 0, 2). // right=1, top=0, bottom=0, left=2
+				MarginLeft(0)
 			blocks = append(blocks, style.Render(commentContent))
 		}
 
